@@ -18,11 +18,12 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - `max_ai_concept.txt.txt` — pierwotna koncepcja (wypracowana z Gemini), po review technicznym.
 
 ## Status
-Faza 0 (fundament) — w toku. Repo: `github.com/tomekukf/maxai` (branch `main`).
+🎉 **Faza 0 (fundament) ukończona.** Repo: `github.com/tomekukf/maxai` (branch `main`).
 - ✅ Krok 0.1 — repozytorium i struktura (commit `0b98d26`).
 - ✅ Krok 0.2 — budżet AWS `maxai-monthly-5usd` ($5, alert-only).
 - ✅ Krok 0.3 — modele Bedrock potwierdzone (Haiku 4.5 + Titan; Sonnet 5 odłożony do 3.2).
-- ▶️ Następny: Krok 0.4 — CDK bootstrap + szkielet infra + IAM (ostatni krok Fazy 0).
+- ✅ Krok 0.4 — CDK (TypeScript), stack `MaxaiStack` wdrożony; bucket S3 `maxaistack-filesbucket16450113-3fnndonlqpsv`.
+- ▶️ Następny: **Faza 1 — Krok 1.1** (RDS PostgreSQL + pgvector).
 
 ## Zablokowane decyzje
 - **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)
@@ -33,7 +34,8 @@ Faza 0 (fundament) — w toku. Repo: `github.com/tomekukf/maxai` (branch `main`)
   - Embeddingi (1024): `amazon.titan-embed-image-v1` ✅
   - NIE używać Claude 3 Haiku (przestarzały).
 - **Embeddingi:** Amazon Titan Multimodal (1024 wym.).
-- **Baza:** RDS PostgreSQL + `pgvector`. **Backend:** Python/Lambda. **IaC:** AWS CDK.
+- **Baza:** RDS PostgreSQL + `pgvector`. **Backend:** Lambdy w Pythonie (runtime `python3.13`;
+  lokalny Python 3.14 jest za nowy dla Lambdy). **IaC:** AWS CDK w **TypeScript** (kod w `infra/`).
 - **Frontend:** React (Vite) + TS + Tailwind + shadcn/ui + `react-pdf` + `react-image-crop`.
 - **Hosting/CI:** AWS Amplify (auto-deploy z `main`).
 

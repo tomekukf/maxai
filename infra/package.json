@@ -1,0 +1,22 @@
+{
+  "name": "maxai-infra",
+  "version": "0.1.0",
+  "private": true,
+  "bin": { "maxai": "bin/maxai.js" },
+  "scripts": {
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "destroy": "cdk destroy"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.160.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.3",
+    "@types/node": "^22.9.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.160.0",
+    "constructs": "^10.4.2"
+  }
+}

@@ -18,7 +18,7 @@
 | Embeddingi | **Amazon Titan Multimodal** (1024 wym.) | Wektor obraz+tekst w jednej przestrzeni. |
 | Baza wektorowa | **RDS PostgreSQL + pgvector** | Sprawdzone, wystarczające dla MVP. |
 | Backend | **Python** (Lambda 3.12) | Najlepszy ekosystem AI/obraz/PDF. |
-| IaC | **AWS CDK** | Lambda + API Gateway + RDS + S3 od początku. |
+| IaC | **AWS CDK (TypeScript)** | Kod w `infra/`. Node 22 pewne; Lambdy w Pythonie z runtime `python3.13` (lokalny Python 3.14 jest za nowy dla Lambdy). |
 | Zasilanie danymi | **Publiczne dane (Agata Meble, ~20–30 sof)**, ID `AGATA-<kod>` | Brak dostępu do Optimy klienta. |
 | Wizualizacje testowe | **Dostarcza użytkownik (2 PDF-y)** | Patrz sekcja D. Fallback: kompozycja realnych zdjęć. |
 
@@ -122,9 +122,14 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
   - Sonnet 5: `eu.anthropic.claude-sonnet-5` — ⏸️ dostęp do włączenia w konsoli (Bedrock → Model access); potrzebny dopiero w Kroku 3.2 (opcjonalna analiza wizualizacji).
 - ✅ Weryfikacja: ścieżka krytyczna (Haiku + Titan) działa — wystarcza do Fazy 1 i wyszukiwania.
 
-**Krok 0.4 — CDK bootstrap + szkielet + IAM dewelopera**
-- Działania: `cdk bootstrap`, minimalny stack, polityki IAM do lokalnej pracy z chmurą.
-- ✅ Weryfikacja: `cdk deploy` minimalnego stacku przechodzi bez błędów.
+**Krok 0.4 — CDK bootstrap + szkielet + IAM dewelopera** — ✅ ZROBIONE
+- Język: **CDK w TypeScript** (`infra/`), Lambdy w Pythonie (runtime `python3.13`).
+- Szkielet: `infra/{package.json,tsconfig.json,cdk.json,bin/maxai.ts,lib/maxai-stack.ts}`.
+- Bootstrap + deploy wykonane. Stack `MaxaiStack`, bucket S3 na pliki: `maxaistack-filesbucket16450113-3fnndonlqpsv` (eu-central-1).
+- IAM: dostęp do wspólnego konta (bez osobnego usera dev na tym etapie).
+- ✅ Weryfikacja: `cdk deploy` OK, output `FilesBucketName`, bucket widoczny w `aws s3 ls`.
+
+> 🎉 **Faza 0 (fundament) ukończona.** Dalej: Faza 1 — baza + zasilanie.
 
 ### Faza 1 — Baza + zasilanie (najpierw dane!)
 
