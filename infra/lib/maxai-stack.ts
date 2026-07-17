@@ -3,6 +3,10 @@ import { Construct } from 'constructs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { HttpApi, HttpMethod, CorsHttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as path from 'path';
 
 /**
  * Główny stack maxai.
@@ -73,10 +77,39 @@ export class MaxaiStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY, // MVP: łatwe sprzątanie
     });
 
+    // --- Lambda: presigned upload URL (Python 3.13, poza VPC) ---
+    const presignFn = new lambda.Function(this, 'PresignFn', {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'handler.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/lambdas/presign')),
+      environment: { FILES_BUCKET: filesBucket.bucketName },
+      timeout: Duration.seconds(10),
+      memorySize: 128,
+    });
+    filesBucket.grantPut(presignFn);
+
+    // --- HTTP API (API Gateway v2) ---
+    const httpApi = new HttpApi(this, 'HttpApi', {
+      corsPreflight: {
+        allowOrigins: ['*'], // TODO (Faza 4): zawęzić do domeny frontendu
+        allowMethods: [CorsHttpMethod.POST, CorsHttpMethod.OPTIONS],
+        allowHeaders: ['content-type'],
+      },
+    });
+    httpApi.addRoutes({
+      path: '/uploads/presign',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('PresignInteg', presignFn),
+    });
+
     // --- Outputs ---
     new CfnOutput(this, 'FilesBucketName', {
       value: filesBucket.bucketName,
       description: 'Bucket S3 na pliki (PDF + zdjecia produktow)',
+    });
+    new CfnOutput(this, 'ApiUrl', {
+      value: httpApi.apiEndpoint,
+      description: 'Bazowy URL HTTP API (dodaj /uploads/presign)',
     });
     new CfnOutput(this, 'DbEndpoint', {
       value: db.dbInstanceEndpointAddress,

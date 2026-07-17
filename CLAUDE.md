@@ -24,7 +24,8 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ Krok 0.3 — modele Bedrock potwierdzone (Haiku 4.5 + Titan; Sonnet 5 odłożony do 3.2).
 - ✅ Krok 0.4 — CDK (TypeScript), stack `MaxaiStack` wdrożony; bucket S3 `maxaistack-filesbucket16450113-3fnndonlqpsv`.
 - ✅ Krok 1.1 — RDS PostgreSQL 16.14 + pgvector + tabela `products` (RDS publiczny, Lambdy poza VPC). Migracja: `scripts/migrate.mjs`.
-- ▶️ Następny: **Krok 1.2** — endpoint `/uploads/presign`.
+- ✅ Krok 1.2 — `/uploads/presign` (Lambda py3.13 + HTTP API). Presigned **path-style** (unika 307/SignatureDoesNotMatch). Test: `scripts/test-presign.mjs`.
+- ▶️ Następny: **Krok 1.3** — `/extract` (Haiku 4.5 → JSON parametrów).
 
 ## Zablokowane decyzje
 - **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)

@@ -139,9 +139,10 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 - Migracja: `backend/migrations/001_init.sql` (extension `vector` + tabela `products` + indeksy). Runner (brak psql): `scripts/migrate.mjs` — pobiera dane z Secrets Manager, wykonuje SQL, weryfikuje.
 - ✅ Weryfikacja: `OK migracja | pgvector: jest | tabela products: jest`.
 
-**Krok 1.2 — S3 + presigned upload**
-- Działania: bucket, Lambda `/uploads/presign`.
-- ✅ Weryfikacja: wgranie pliku przez presigned URL kończy się sukcesem, plik w S3.
+**Krok 1.2 — S3 + presigned upload** — ✅ ZROBIONE
+- Bucket (Faza 0) + Lambda `/uploads/presign` (Python 3.13, poza VPC) + HTTP API (API Gateway v2). Kod: `backend/lambdas/presign/handler.py`. Test: `scripts/test-presign.mjs`. Output `ApiUrl`.
+- Gotcha: presigned URL w **path-style** (`Config(s3={'addressing_style':'path'})`) — inaczej S3 zwraca 307 na virtual-hosted host świeżego bucketu, a klient podążający za redirectem (fetch/przeglądarka) dostaje SignatureDoesNotMatch. Nie podpisujemy też Content-Type.
+- ✅ Weryfikacja: `PUT status: 200 OK`, plik w `s3://.../test/`.
 
 **Krok 1.3 — Lambda `/extract` (Haiku 4.5)**
 - Działania: opis → JSON parametrów (wymiary, kolor, styl, materiał).
