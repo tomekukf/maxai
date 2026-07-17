@@ -133,9 +133,11 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 
 ### Faza 1 — Baza + zasilanie (najpierw dane!)
 
-**Krok 1.1 — RDS PostgreSQL + pgvector + schemat**
-- Działania: instancja `db.t3.micro`, rozszerzenie `pgvector`, migracja tabeli `products`.
-- ✅ Weryfikacja: połączenie działa, `\dx` pokazuje `vector`, tabela `products` istnieje.
+**Krok 1.1 — RDS PostgreSQL + pgvector + schemat** — ✅ ZROBIONE
+- Sieć MVP: RDS **publicznie dostępny**, Lambdy **poza VPC** → brak NAT/VPC endpoints ($0 extra). Ochrona: hasło (Secrets Manager) + SSL, SG 5432.
+- CDK: VPC (bez NAT) + RDS PostgreSQL **16.14** `db.t3.micro` (Free Tier) + SG. Endpoint/login w outputach stacku (`DbEndpoint`, `DbSecretName`) i Secrets Manager.
+- Migracja: `backend/migrations/001_init.sql` (extension `vector` + tabela `products` + indeksy). Runner (brak psql): `scripts/migrate.mjs` — pobiera dane z Secrets Manager, wykonuje SQL, weryfikuje.
+- ✅ Weryfikacja: `OK migracja | pgvector: jest | tabela products: jest`.
 
 **Krok 1.2 — S3 + presigned upload**
 - Działania: bucket, Lambda `/uploads/presign`.

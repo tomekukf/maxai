@@ -1,24 +1,25 @@
-import { Stack, StackProps, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
+import { Stack, StackProps, RemovalPolicy, CfnOutput, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as rds from 'aws-cdk-lib/aws-rds';
 
 /**
  * Główny stack maxai.
- * Faza 0: minimalny szkielet — bucket S3 na pliki (PDF wizualizacji + zdjęcia produktów).
- * Kolejne zasoby (RDS pgvector, Lambdy, API Gateway) dokładamy w Fazie 1.
+ * Faza 1: bucket S3 (pliki) + VPC (bez NAT) + RDS PostgreSQL 16 (pgvector).
+ * Sieć MVP: RDS publicznie dostępny, Lambdy poza VPC → brak NAT/VPC endpoints ($0 extra).
+ * Ochrona bazy: silne wygenerowane hasło (Secrets Manager) + SSL.
  */
 export class MaxaiStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    // Bucket na pliki: PDF-y wizualizacji oraz zdjęcia referencyjne produktów.
+    // --- S3: PDF-y wizualizacji + zdjęcia referencyjne produktów ---
     const filesBucket = new s3.Bucket(this, 'FilesBucket', {
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      // MVP: pozwalamy usunąć bucket i jego zawartość razem ze stackiem (tanie sprzątanie).
-      removalPolicy: RemovalPolicy.DESTROY,
+      removalPolicy: RemovalPolicy.DESTROY, // MVP: łatwe sprzątanie
       autoDeleteObjects: true,
-      // CORS dla presigned upload z frontendu.
       cors: [
         {
           allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
@@ -30,9 +31,64 @@ export class MaxaiStack extends Stack {
       ],
     });
 
+    // --- VPC: minimalny, BEZ NAT Gateway (oszczędność ~$32/mies) ---
+    // Tylko podsieci publiczne — RDS publicznie dostępny (MVP), Lambdy poza VPC.
+    const vpc = new ec2.Vpc(this, 'Vpc', {
+      maxAzs: 2,
+      natGateways: 0,
+      subnetConfiguration: [
+        { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
+      ],
+    });
+
+    // --- Security group RDS ---
+    // MVP: dostęp z internetu na 5432 (Lambdy poza VPC mają dynamiczne IP).
+    // Ochrona: silne hasło + SSL. TODO(produkcja): ograniczyć źródła / RDS prywatny.
+    const dbSg = new ec2.SecurityGroup(this, 'DbSg', {
+      vpc,
+      description: 'maxai RDS PostgreSQL - dostep na 5432 (MVP publiczny)',
+      allowAllOutbound: true,
+    });
+    dbSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(5432), 'PostgreSQL (MVP, publiczny)');
+
+    // --- RDS PostgreSQL 16 (pgvector włączymy migracją: CREATE EXTENSION vector) ---
+    const db = new rds.DatabaseInstance(this, 'Db', {
+      engine: rds.DatabaseInstanceEngine.postgres({
+        version: rds.PostgresEngineVersion.of('16.14', '16'),
+      }),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      publiclyAccessible: true,
+      securityGroups: [dbSg],
+      databaseName: 'maxai',
+      credentials: rds.Credentials.fromGeneratedSecret('maxai_admin'),
+      allocatedStorage: 20,
+      maxAllocatedStorage: 30,
+      storageType: rds.StorageType.GP3,
+      multiAz: false,
+      storageEncrypted: true,
+      backupRetention: Duration.days(0), // MVP: bez automatycznych backupów
+      deleteAutomatedBackups: true,
+      removalPolicy: RemovalPolicy.DESTROY, // MVP: łatwe sprzątanie
+    });
+
+    // --- Outputs ---
     new CfnOutput(this, 'FilesBucketName', {
       value: filesBucket.bucketName,
-      description: 'Nazwa bucketu S3 na pliki (PDF + zdjęcia produktów)',
+      description: 'Bucket S3 na pliki (PDF + zdjecia produktow)',
+    });
+    new CfnOutput(this, 'DbEndpoint', {
+      value: db.dbInstanceEndpointAddress,
+      description: 'Host RDS PostgreSQL',
+    });
+    new CfnOutput(this, 'DbPort', {
+      value: db.dbInstanceEndpointPort,
+      description: 'Port RDS',
+    });
+    new CfnOutput(this, 'DbSecretName', {
+      value: db.secret?.secretName ?? 'n/a',
+      description: 'Nazwa sekretu w Secrets Manager (login + haslo)',
     });
   }
 }

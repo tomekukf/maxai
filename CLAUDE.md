@@ -23,7 +23,8 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ Krok 0.2 — budżet AWS `maxai-monthly-5usd` ($5, alert-only).
 - ✅ Krok 0.3 — modele Bedrock potwierdzone (Haiku 4.5 + Titan; Sonnet 5 odłożony do 3.2).
 - ✅ Krok 0.4 — CDK (TypeScript), stack `MaxaiStack` wdrożony; bucket S3 `maxaistack-filesbucket16450113-3fnndonlqpsv`.
-- ▶️ Następny: **Faza 1 — Krok 1.1** (RDS PostgreSQL + pgvector).
+- ✅ Krok 1.1 — RDS PostgreSQL 16.14 + pgvector + tabela `products` (RDS publiczny, Lambdy poza VPC). Migracja: `scripts/migrate.mjs`.
+- ▶️ Następny: **Krok 1.2** — endpoint `/uploads/presign`.
 
 ## Zablokowane decyzje
 - **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)
