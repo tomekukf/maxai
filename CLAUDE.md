@@ -18,7 +18,10 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - `max_ai_concept.txt.txt` — pierwotna koncepcja (wypracowana z Gemini), po review technicznym.
 
 ## Status
-Faza koncepcyjno-planistyczna. Kod jeszcze nie powstał. Repo nie jest jeszcze gitem.
+Faza 0 (fundament) — w toku. Repo: `github.com/tomekukf/maxai` (branch `main`).
+- ✅ Krok 0.1 — repozytorium i struktura (commit `0b98d26`).
+- ✅ Krok 0.2 — budżet AWS `maxai-monthly-5usd` ($5, alert-only).
+- ▶️ Następny: Krok 0.3 — dostęp do modeli Bedrock w `eu-central-1`.
 
 ## Zablokowane decyzje
 - **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)

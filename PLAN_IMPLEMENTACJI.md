@@ -105,13 +105,14 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 
 ### Faza 0 — Fundament
 
-**Krok 0.1 — Repozytorium i struktura**
-- Działania: `git init`, struktura folderów (`frontend/`, `backend/`, `infra/`, `scripts/`), `.gitignore`, README.
+**Krok 0.1 — Repozytorium i struktura** — ✅ ZROBIONE (commit `0b98d26`, branch `main`)
+- Działania: `git init -b main`, struktura folderów (`frontend/`, `backend/`, `infra/`, `scripts/`, `docs/`), `.gitignore`, `.nvmrc` (22), README.
 - ✅ Weryfikacja: repo jest gitem, struktura istnieje, pierwszy commit wykonany.
 
-**Krok 0.2 — Konto AWS + budżet i alerty**
-- Działania: region `eu-central-1` (jak liveorganizer), konto wspólne z liveorganizer; AWS Budgets z alertem e-mail (np. próg 50 zł/mies.) — sprawdzić, czy alert nie istnieje już na poziomie konta.
-- ✅ Weryfikacja: alert budżetowy aktywny i potwierdzony e-mailem.
+**Krok 0.2 — Konto AWS + budżet i alerty** — ✅ ZROBIONE
+- Działania: konto wspólne z liveorganizer (zweryfikowane `aws sts get-caller-identity`); budżet `maxai-monthly-5usd` ($5, alert-only, e-mail na progach 50/80/100% actual + 100% forecast). Definicje: `infra/budget-5usd.json`, `infra/budget-notifications.json`.
+- ✅ Weryfikacja: `aws budgets describe-budget` zwraca budżet z limitem 5 USD, status HEALTHY.
+- Uwaga: AWS Budgets tylko alarmuje, nie zatrzymuje wydatków (twardy auto-stop = Budget Actions, ew. później).
 
 **Krok 0.3 — Dostęp do modeli Bedrock**
 - Działania: włączenie dostępu do Haiku 4.5, Sonnet 5, Titan Multimodal w regionie `eu-central-1` (potwierdzić dostępność modeli w tym regionie).

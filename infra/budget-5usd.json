@@ -1,0 +1,6 @@
+{
+  "BudgetName": "maxai-monthly-5usd",
+  "BudgetLimit": { "Amount": "5", "Unit": "USD" },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST"
+}
