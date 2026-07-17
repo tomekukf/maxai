@@ -154,9 +154,10 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 - ✅ Weryfikacja: `HTTP 200 {id}`, `{ produkty:1, z_embeddingiem:1 }`.
 - **Build fresh clone** (przed `cdk deploy`): `python -m pip install -r backend/lambdas/products/requirements.txt -t backend/lambdas/products/`.
 
-**Krok 1.5 — Panel `IngestPage`**
-- Działania: formularz (upload zdjęć, opis, ID Optima), integracja z API.
-- ✅ Weryfikacja: dodanie produktu przez UI działa end-to-end.
+**Krok 1.5 — Panel `IngestPage`** — ✅ ZROBIONE
+- Frontend: React 18 + Vite 5 + TS + Tailwind 3 (`frontend/`). `IngestPage` + `lib/api.ts`. API URL w `frontend/.env.local` (gitignore; wzór `.env.example`).
+- Flow: upload zdjęcia → `/extract` (podgląd/edycja JSON) → `/products`. **Konwersja obrazu do JPEG w przeglądarce** (canvas) przed uploadem — Titan przyjmuje tylko JPEG/PNG (AVIF/WebP z realnych sklepów → błąd „Unable to process provided image").
+- ✅ Weryfikacja: dodanie produktu przez UI działa end-to-end (licznik `products` rośnie).
 
 **Krok 1.6 — Zasilenie danymi testowymi (Agata Meble)**
 - Źródło: `https://www.agatameble.pl/meble/wypoczynkowe/sofy`
