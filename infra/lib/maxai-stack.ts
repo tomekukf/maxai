@@ -4,9 +4,13 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { HttpApi, HttpMethod, CorsHttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as path from 'path';
+
+// Model Bedrock (EU inference profile) do ekstrakcji/NLP.
+const HAIKU_MODEL_ID = 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 /**
  * Główny stack maxai.
@@ -100,6 +104,29 @@ export class MaxaiStack extends Stack {
       path: '/uploads/presign',
       methods: [HttpMethod.POST],
       integration: new HttpLambdaIntegration('PresignInteg', presignFn),
+    });
+
+    // --- Lambda: ekstrakcja parametrów (Haiku 4.5 na Bedrock) ---
+    const extractFn = new lambda.Function(this, 'ExtractFn', {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'handler.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/lambdas/extract')),
+      environment: { EXTRACT_MODEL_ID: HAIKU_MODEL_ID },
+      timeout: Duration.seconds(30),
+      memorySize: 256,
+    });
+    // MVP: uproszczone uprawnienie do wywołania modeli/profili Bedrock.
+    // TODO (produkcja): zawęzić resources do ARN profilu EU + modeli bazowych.
+    extractFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: ['*'],
+      }),
+    );
+    httpApi.addRoutes({
+      path: '/extract',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('ExtractInteg', extractFn),
     });
 
     // --- Outputs ---

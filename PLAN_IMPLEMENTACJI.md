@@ -144,9 +144,9 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 - Gotcha: presigned URL w **path-style** (`Config(s3={'addressing_style':'path'})`) — inaczej S3 zwraca 307 na virtual-hosted host świeżego bucketu, a klient podążający za redirectem (fetch/przeglądarka) dostaje SignatureDoesNotMatch. Nie podpisujemy też Content-Type.
 - ✅ Weryfikacja: `PUT status: 200 OK`, plik w `s3://.../test/`.
 
-**Krok 1.3 — Lambda `/extract` (Haiku 4.5)**
-- Działania: opis → JSON parametrów (wymiary, kolor, styl, materiał).
-- ✅ Weryfikacja: przykładowy surowy opis zwraca poprawnie ustrukturyzowany JSON.
+**Krok 1.3 — Lambda `/extract` (Haiku 4.5)** — ✅ ZROBIONE
+- Działania: opis → JSON parametrów. Kod: `backend/lambdas/extract/handler.py` (Bedrock `converse`, model `eu.anthropic.claude-haiku-4-5-...`, `temperature:0`). Route `/extract`. IAM `bedrock:InvokeModel`. Test: `scripts/test-extract.mjs`.
+- ✅ Weryfikacja: przykładowy opis → poprawny JSON (nazwa, wymiary, kolor, materiały, cena, kod).
 
 **Krok 1.4 — Lambda `/products` (Titan + zapis)**
 - Działania: embedding głównego zdjęcia (Titan) + zapis atomowy wiersza.
