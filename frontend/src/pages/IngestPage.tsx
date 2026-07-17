@@ -15,6 +15,7 @@ export default function IngestPage() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [description, setDescription] = useState('');
   const [paramsText, setParamsText] = useState('');
+  const [dims, setDims] = useState({ szer: '', gleb: '', wys: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -55,6 +56,14 @@ export default function IngestPage() {
         return;
       }
     }
+    // wymiary z pól strukturalnych → params.wymiary_cm (kanon)
+    const wym: Record<string, number> = {};
+    if (dims.szer) wym.szerokosc = Number(dims.szer);
+    if (dims.gleb) wym.glebokosc = Number(dims.gleb);
+    if (dims.wys) wym.wysokosc = Number(dims.wys);
+    if (Object.keys(wym).length) {
+      params.wymiary_cm = { ...((params.wymiary_cm as Record<string, unknown>) ?? {}), ...wym };
+    }
     setBusy(true);
     try {
       const imageKeys: string[] = [];
@@ -68,6 +77,7 @@ export default function IngestPage() {
       });
       setMsg({ kind: 'ok', text: `Zapisano produkt (id: ${id}, zdjęć: ${images}).` });
       setFiles([]);
+      setDims({ szer: '', gleb: '', wys: '' });
       setDescription('');
       setParamsText('');
       setName('');
@@ -143,6 +153,35 @@ export default function IngestPage() {
           <button onClick={handleExtract} disabled={busy} className={btnSecondary}>
             Wyciągnij parametry (Haiku)
           </button>
+        </Field>
+
+        <Field label="Wymiary (cm) — opcjonalnie">
+          <div className="flex gap-2">
+            <input
+              value={dims.szer}
+              onChange={(e) => setDims((d) => ({ ...d, szer: e.target.value }))}
+              placeholder="szer."
+              inputMode="numeric"
+              className={inputCls}
+            />
+            <input
+              value={dims.gleb}
+              onChange={(e) => setDims((d) => ({ ...d, gleb: e.target.value }))}
+              placeholder="głęb."
+              inputMode="numeric"
+              className={inputCls}
+            />
+            <input
+              value={dims.wys}
+              onChange={(e) => setDims((d) => ({ ...d, wys: e.target.value }))}
+              placeholder="wys."
+              inputMode="numeric"
+              className={inputCls}
+            />
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Trafią do <code>params.wymiary_cm</code>. Warianty/specyfikację dodaj w polu JSON niżej.
+          </p>
         </Field>
 
         <Field label="Parametry (JSON — edytowalne)">

@@ -14,16 +14,16 @@ bedrock = boto3.client(
 )
 MODEL_ID = os.environ["EXTRACT_MODEL_ID"]  # eu.anthropic.claude-haiku-4-5-...
 
+# Kształt zgodny z docs/product-data-model.md (kanon params).
 SYSTEM = (
-    "Jesteś asystentem, który wyciąga ustrukturyzowane parametry mebla z surowego, "
-    "niesformatowanego opisu producenta. Zwróć WYŁĄCZNIE poprawny JSON (bez markdown, "
-    "bez komentarzy) o dokładnie takich kluczach: "
-    "nazwa (string|null), kategoria (string|null), "
-    "szerokosc_cm (number|null), glebokosc_cm (number|null), wysokosc_cm (number|null), "
-    "kolor (string|null), materialy (lista stringów), styl (string|null), "
-    "cena_pln (number|null), kod_produktu (string|null). "
-    "Czego nie ma w opisie — ustaw null (lub pustą listę dla materialy). "
-    "Wymiary podawaj jako liczby w cm."
+    "Wyciągasz ustrukturyzowane parametry produktu (mebel/wnętrze) z surowego opisu producenta. "
+    "Zwróć WYŁĄCZNIE poprawny JSON (bez markdown, bez komentarzy) o kluczach: "
+    "kategoria (string|null), kod_produktu (string|null), cena_pln (number|null), "
+    "material (string|null), kolor (string|null), styl (string|null), "
+    "wymiary_cm (obiekt: szerokosc, glebokosc, wysokosc, wysokosc_siedziska, dlugosc_spania — liczby lub null), "
+    "specyfikacja (obiekt: konstrukcja, wypelnienie, funkcje [lista], nosnosc_kg, gwarancja — null/[] gdy brak), "
+    "warianty (lista obiektów {nazwa, kolor, material, kod} — [] gdy brak). "
+    "Czego nie ma w opisie → null (lub [] dla list). Wymiary jako liczby w cm."
 )
 
 
