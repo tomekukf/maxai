@@ -35,6 +35,7 @@ Thumbs.db
 # --- Dane robocze / scraper ---
 scripts/.cache/
 data/raw/
+rawdata/
 *.log
 
 # --- Vendorowane zależności Lambdy products (pg8000) — instalowane build-em ---
