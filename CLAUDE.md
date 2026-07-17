@@ -21,14 +21,17 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 Faza 0 (fundament) — w toku. Repo: `github.com/tomekukf/maxai` (branch `main`).
 - ✅ Krok 0.1 — repozytorium i struktura (commit `0b98d26`).
 - ✅ Krok 0.2 — budżet AWS `maxai-monthly-5usd` ($5, alert-only).
-- ▶️ Następny: Krok 0.3 — dostęp do modeli Bedrock w `eu-central-1`.
+- ✅ Krok 0.3 — modele Bedrock potwierdzone (Haiku 4.5 + Titan; Sonnet 5 odłożony do 3.2).
+- ▶️ Następny: Krok 0.4 — CDK bootstrap + szkielet infra + IAM (ostatni krok Fazy 0).
 
 ## Zablokowane decyzje
 - **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)
   + Claude vision. Auto-detekcja → iteracja 2.
-- **Modele Bedrock:** Claude **Haiku 4.5** (`anthropic.claude-haiku-4-5`) do ekstrakcji/NLP,
-  Claude **Sonnet 5** (`anthropic.claude-sonnet-5`) do analizy wizualizacji.
-  NIE używać Claude 3 Haiku (przestarzały).
+- **Modele Bedrock (eu-central-1, inference profile EU — dane w UE):**
+  - Ekstrakcja/NLP: Haiku 4.5 → `eu.anthropic.claude-haiku-4-5-20251001-v1:0` ✅
+  - Analiza wizualizacji: Sonnet 5 → `eu.anthropic.claude-sonnet-5` ⏸️ (dostęp do włączenia; potrzebny w Kroku 3.2)
+  - Embeddingi (1024): `amazon.titan-embed-image-v1` ✅
+  - NIE używać Claude 3 Haiku (przestarzały).
 - **Embeddingi:** Amazon Titan Multimodal (1024 wym.).
 - **Baza:** RDS PostgreSQL + `pgvector`. **Backend:** Python/Lambda. **IaC:** AWS CDK.
 - **Frontend:** React (Vite) + TS + Tailwind + shadcn/ui + `react-pdf` + `react-image-crop`.

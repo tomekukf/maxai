@@ -12,8 +12,9 @@
 | Decyzja | Wybór | Uzasadnienie |
 |---|---|---|
 | Detekcja obiektów | **Ścieżka A — bez Rekognition** | Ręczne kadrowanie (`react-image-crop`) + Claude vision. Prostszy pipeline, koszt tylko za realne wyszukiwania. Auto-detekcja → iteracja 2. |
-| Model ekstrakcji/NLP | **Claude Haiku 4.5** (`anthropic.claude-haiku-4-5`) | Tani, szybki, multimodalny. Ekstrakcja parametrów + „dopytywanie". |
-| Model analizy wizualizacji | **Claude Sonnet 5** (`anthropic.claude-sonnet-5`) | Wyższa jakość rozpoznania mebla ze zdjęcia. Tylko w ścieżce wyszukiwania. |
+| Model ekstrakcji/NLP | **Claude Haiku 4.5** — `eu.anthropic.claude-haiku-4-5-20251001-v1:0` ✅ | Tani, szybki, multimodalny. Ekstrakcja parametrów + „dopytywanie". |
+| Model analizy wizualizacji | **Claude Sonnet 5** — `eu.anthropic.claude-sonnet-5` ⏸️ | Opcjonalny (Krok 3.2). Dostęp do włączenia w konsoli. |
+| Embeddingi (model) | **Titan Multimodal** — `amazon.titan-embed-image-v1` ✅ | Wektor 1024. |
 | Embeddingi | **Amazon Titan Multimodal** (1024 wym.) | Wektor obraz+tekst w jednej przestrzeni. |
 | Baza wektorowa | **RDS PostgreSQL + pgvector** | Sprawdzone, wystarczające dla MVP. |
 | Backend | **Python** (Lambda 3.12) | Najlepszy ekosystem AI/obraz/PDF. |
@@ -114,9 +115,12 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 - ✅ Weryfikacja: `aws budgets describe-budget` zwraca budżet z limitem 5 USD, status HEALTHY.
 - Uwaga: AWS Budgets tylko alarmuje, nie zatrzymuje wydatków (twardy auto-stop = Budget Actions, ew. później).
 
-**Krok 0.3 — Dostęp do modeli Bedrock**
-- Działania: włączenie dostępu do Haiku 4.5, Sonnet 5, Titan Multimodal w regionie `eu-central-1` (potwierdzić dostępność modeli w tym regionie).
-- ✅ Weryfikacja: testowe wywołanie każdego z 3 modeli zwraca poprawną odpowiedź.
+**Krok 0.3 — Dostęp do modeli Bedrock** — ✅ ZROBIONE (Sonnet 5 odłożony do Kroku 3.2)
+- Modele potwierdzone testowo w `eu-central-1` (inference profile **EU** → dane w UE):
+  - Haiku 4.5: `eu.anthropic.claude-haiku-4-5-20251001-v1:0` — ✅ (converse zwrócił „OK")
+  - Titan Multimodal (1024): `amazon.titan-embed-image-v1` — ✅ (embedding length 1024)
+  - Sonnet 5: `eu.anthropic.claude-sonnet-5` — ⏸️ dostęp do włączenia w konsoli (Bedrock → Model access); potrzebny dopiero w Kroku 3.2 (opcjonalna analiza wizualizacji).
+- ✅ Weryfikacja: ścieżka krytyczna (Haiku + Titan) działa — wystarcza do Fazy 1 i wyszukiwania.
 
 **Krok 0.4 — CDK bootstrap + szkielet + IAM dewelopera**
 - Działania: `cdk bootstrap`, minimalny stack, polityki IAM do lokalnej pracy z chmurą.
