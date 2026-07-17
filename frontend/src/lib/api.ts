@@ -78,3 +78,62 @@ export async function saveProduct(input: {
   if (!r.ok) throw new Error(`products: ${r.status}`);
   return r.json();
 }
+
+export type SearchResult = {
+  optimaId: string;
+  name: string;
+  params: Record<string, unknown>;
+  imageUrl: string;
+  similarity: number;
+};
+
+export async function searchByImage(imageBase64: string, topK = 3): Promise<SearchResult[]> {
+  const r = await fetch(`${API_URL}/search`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ imageBase64, topK }),
+  });
+  if (!r.ok) throw new Error(`search: ${r.status}`);
+  const data = await r.json();
+  return (data.results ?? []) as SearchResult[];
+}
+
+export type Product = {
+  optimaId: string;
+  name: string;
+  params: Record<string, unknown>;
+  imageUrl: string;
+};
+
+export async function listProducts(): Promise<Product[]> {
+  const r = await fetch(`${API_URL}/products`, { method: 'GET' });
+  if (!r.ok) throw new Error(`products list: ${r.status}`);
+  const data = await r.json();
+  return (data.items ?? []) as Product[];
+}
+
+export async function deleteProduct(optimaId: string): Promise<{ deleted: number }> {
+  const r = await fetch(`${API_URL}/products/${encodeURIComponent(optimaId)}`, { method: 'DELETE' });
+  if (!r.ok) throw new Error(`delete: ${r.status}`);
+  return r.json();
+}
+
+export async function deleteAllProducts(): Promise<{ deleted: number }> {
+  const r = await fetch(`${API_URL}/products`, { method: 'DELETE' });
+  if (!r.ok) throw new Error(`delete all: ${r.status}`);
+  return r.json();
+}
+
+export type Box = { x: number; y: number; w: number; h: number };
+export type DetectedItem = { label: string; box: Box };
+
+export async function detectItems(imageBase64: string): Promise<DetectedItem[]> {
+  const r = await fetch(`${API_URL}/detect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ imageBase64 }),
+  });
+  if (!r.ok) throw new Error(`detect: ${r.status}`);
+  const data = await r.json();
+  return (data.items ?? []) as DetectedItem[];
+}

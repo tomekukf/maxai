@@ -11,6 +11,29 @@ if (!API) {
 const LIMIT = Number(process.env.LIMIT ?? 25);
 const DELAY_MS = Number(process.env.DELAY_MS ?? 500); // rate limit
 
+async function fetchBestImage(originalUrl) {
+  // Preferuj większy wariant -large (lepszy embedding), z fallbackiem na oryginał.
+  const bigUrl = originalUrl.replace(/-small\.jpg$/i, '-large.jpg');
+  if (bigUrl !== originalUrl) {
+    try {
+      const r = await fetch(bigUrl);
+      if (r.ok) {
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length > 3000) return buf; // sensowny większy obraz (nie placeholder)
+      }
+    } catch {
+      /* fallback niżej */
+    }
+  }
+  try {
+    const r = await fetch(originalUrl);
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+  } catch {
+    /* nic */
+  }
+  return null;
+}
+
 const all = JSON.parse(readFileSync('rawdata/brw-products.json', 'utf8'));
 const products = all.slice(0, LIMIT);
 console.log(`Ładuję ${products.length} z ${all.length} produktów...`);
@@ -19,13 +42,12 @@ let ok = 0;
 for (const [i, p] of products.entries()) {
   const tag = `[${i + 1}/${products.length}]`;
   try {
-    // 1) pobierz zdjęcie (JPEG z static.brw.pl)
-    const imgRes = await fetch(p.imageUrl);
-    if (!imgRes.ok) {
-      console.log(`${tag} SKIP obraz HTTP ${imgRes.status}`);
+    // 1) pobierz zdjęcie — preferuj większy wariant -large (lepszy embedding)
+    const bytes = await fetchBestImage(p.imageUrl);
+    if (!bytes) {
+      console.log(`${tag} SKIP obraz`);
       continue;
     }
-    const bytes = Buffer.from(await imgRes.arrayBuffer());
 
     // 2) presign + upload
     const pre = await (

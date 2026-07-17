@@ -82,6 +82,7 @@ def lambda_handler(event, _ctx):
         return _resp(400, {"error": "Nieprawidłowy base64"})
 
     top_k = max(1, min(int(body.get("topK", 3)), 20))
+    min_sim = float(body.get("minSimilarity", 0.5))  # próg — odcina słabe dopasowania
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
 
@@ -105,13 +106,16 @@ def lambda_handler(event, _ctx):
 
     results = []
     for optima_id, name, params, image_s3_url, similarity in rows:
+        sim = round(float(similarity), 4)
+        if sim < min_sim:
+            continue  # poniżej progu — nie pokazujemy (np. lampa vs sofy)
         results.append(
             {
                 "optimaId": optima_id,
                 "name": name,
                 "params": params,
                 "imageUrl": _presign_get(image_s3_url),
-                "similarity": round(float(similarity), 4),
+                "similarity": sim,
             }
         )
     return _resp(200, {"results": results})

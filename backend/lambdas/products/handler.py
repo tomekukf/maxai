@@ -14,13 +14,18 @@ import ssl
 
 import boto3
 import pg8000.native  # vendorowane (pip install -t)
+from botocore.config import Config
 
 REGION = os.environ.get("AWS_REGION", "eu-central-1")
 FILES_BUCKET = os.environ["FILES_BUCKET"]
 DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
 EMBED_MODEL_ID = os.environ["EMBED_MODEL_ID"]  # amazon.titan-embed-image-v1
 
-s3 = boto3.client("s3", region_name=REGION)
+s3 = boto3.client(
+    "s3",
+    region_name=REGION,
+    config=Config(s3={"addressing_style": "path"}, signature_version="s3v4"),
+)
 bedrock = boto3.client("bedrock-runtime", region_name=REGION)
 sm = boto3.client("secretsmanager", region_name=REGION)
 
@@ -70,8 +75,81 @@ def _insert(optima_id, name, params, image_url, source_url, vec):
     )
 
 
+def _presign_get(s3_url: str) -> str:
+    without = s3_url.replace("s3://", "", 1)
+    bucket, key = without.split("/", 1)
+    return s3.generate_presigned_url("get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600)
+
+
+def _list_products():
+    global _conn
+
+    def q():
+        return _db().run(
+            "SELECT optima_id, name, params, image_s3_url FROM products ORDER BY created_at DESC"
+        )
+
+    try:
+        rows = q()
+    except Exception:  # noqa: BLE001
+        _conn = None
+        rows = q()
+    items = [
+        {
+            "optimaId": optima_id,
+            "name": name,
+            "params": params,
+            "imageUrl": _presign_get(image_s3_url),
+        }
+        for optima_id, name, params, image_s3_url in rows
+    ]
+    return _resp(200, {"items": items})
+
+
+def _delete_s3(s3_url):
+    try:
+        without = s3_url.replace("s3://", "", 1)
+        bucket, key = without.split("/", 1)
+        s3.delete_object(Bucket=bucket, Key=key)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _delete_products(optima_id):
+    global _conn
+
+    def run(sql, **kw):
+        return _db().run(sql, **kw)
+
+    def fetch():
+        if optima_id:
+            return run("SELECT image_s3_url FROM products WHERE optima_id = :oid", oid=optima_id)
+        return run("SELECT image_s3_url FROM products")
+
+    try:
+        rows = fetch()
+    except Exception:  # noqa: BLE001
+        _conn = None
+        rows = fetch()
+
+    for (url,) in rows:
+        _delete_s3(url)
+
+    if optima_id:
+        run("DELETE FROM products WHERE optima_id = :oid", oid=optima_id)
+    else:
+        run("DELETE FROM products")
+    return _resp(200, {"deleted": len(rows)})
+
+
 def lambda_handler(event, _ctx):
     global _conn
+    method = event.get("requestContext", {}).get("http", {}).get("method", "POST")
+    if method == "GET":
+        return _list_products()
+    if method == "DELETE":
+        optima_id = (event.get("pathParameters") or {}).get("optimaId")
+        return _delete_products(optima_id)
     try:
         body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:

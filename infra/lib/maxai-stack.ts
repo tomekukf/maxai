@@ -98,7 +98,12 @@ export class MaxaiStack extends Stack {
     const httpApi = new HttpApi(this, 'HttpApi', {
       corsPreflight: {
         allowOrigins: ['*'], // TODO (Faza 4): zawęzić do domeny frontendu
-        allowMethods: [CorsHttpMethod.POST, CorsHttpMethod.OPTIONS],
+        allowMethods: [
+          CorsHttpMethod.GET,
+          CorsHttpMethod.POST,
+          CorsHttpMethod.DELETE,
+          CorsHttpMethod.OPTIONS,
+        ],
         allowHeaders: ['content-type'],
       },
     });
@@ -131,6 +136,24 @@ export class MaxaiStack extends Stack {
       integration: new HttpLambdaIntegration('ExtractInteg', extractFn),
     });
 
+    // --- Lambda: auto-detekcja mebli na obrazie (Haiku 4.5 vision) ---
+    const detectFn = new lambda.Function(this, 'DetectFn', {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'handler.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/lambdas/detect')),
+      environment: { DETECT_MODEL_ID: HAIKU_MODEL_ID },
+      timeout: Duration.seconds(30),
+      memorySize: 256,
+    });
+    detectFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['bedrock:InvokeModel'], resources: ['*'] }),
+    );
+    httpApi.addRoutes({
+      path: '/detect',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('DetectInteg', detectFn),
+    });
+
     // --- Lambda: zapis produktu (embedding Titan + INSERT do RDS) ---
     const productsFn = new lambda.Function(this, 'ProductsFn', {
       runtime: lambda.Runtime.PYTHON_3_13,
@@ -144,7 +167,7 @@ export class MaxaiStack extends Stack {
       timeout: Duration.seconds(30),
       memorySize: 512,
     });
-    filesBucket.grantRead(productsFn);
+    filesBucket.grantReadWrite(productsFn); // read (embedding) + delete (usuwanie zdjęć)
     db.secret!.grantRead(productsFn);
     productsFn.addToRolePolicy(
       new iam.PolicyStatement({
@@ -152,10 +175,16 @@ export class MaxaiStack extends Stack {
         resources: ['*'],
       }),
     );
+    const productsInteg = new HttpLambdaIntegration('ProductsInteg', productsFn);
     httpApi.addRoutes({
       path: '/products',
-      methods: [HttpMethod.POST],
-      integration: new HttpLambdaIntegration('ProductsInteg', productsFn),
+      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.DELETE],
+      integration: productsInteg,
+    });
+    httpApi.addRoutes({
+      path: '/products/{optimaId}',
+      methods: [HttpMethod.DELETE],
+      integration: productsInteg,
     });
 
     // --- Lambda: wyszukiwanie substytutów (embedding wycinka → pgvector) ---
