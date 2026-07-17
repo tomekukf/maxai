@@ -19,7 +19,7 @@
 | Baza wektorowa | **RDS PostgreSQL + pgvector** | Sprawdzone, wystarczające dla MVP. |
 | Backend | **Python** (Lambda 3.12) | Najlepszy ekosystem AI/obraz/PDF. |
 | IaC | **AWS CDK (TypeScript)** | Kod w `infra/`. Node 22 pewne; Lambdy w Pythonie z runtime `python3.13` (lokalny Python 3.14 jest za nowy dla Lambdy). |
-| Zasilanie danymi | **Publiczne dane (Agata Meble, ~20–30 sof)**, ID `AGATA-<kod>` | Brak dostępu do Optimy klienta. |
+| Zasilanie danymi | **BRW (JSON-LD, ~25 sof)**, ID `BRW-<kod>` | Agata za Cloudflare → pivot na BRW. Brak dostępu do Optimy klienta. |
 | Wizualizacje testowe | **Dostarcza użytkownik (2 PDF-y)** | Patrz sekcja D. Fallback: kompozycja realnych zdjęć. |
 
 ---
@@ -50,7 +50,7 @@
 
 Potrzebne **przed Krokiem 2.5** (test end-to-end):
 
-1. **PDF „test pozytywny"** — salon z sofą, która **JEST** w zasilonej bazie (jedna z ~20–30 sof Agaty).
+1. **PDF „test pozytywny"** — salon z sofą, która **JEST** w zasilonej bazie (jedna z ~25 sof BRW).
    - Sofa na wizualizacji powinna **wizualnie odpowiadać** zdjęciu produktu w bazie (podobny model/kąt),
      żeby podobieństwo wektorowe było wysokie. Ustalimy wspólnie, którą sofę z seed-setu użyć.
 2. **PDF „test alternatywny"** — salon z sofą **innego producenta**, której **NIE MA** w bazie.
@@ -159,14 +159,12 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 - Flow: upload zdjęcia → `/extract` (podgląd/edycja JSON) → `/products`. **Konwersja obrazu do JPEG w przeglądarce** (canvas) przed uploadem — Titan przyjmuje tylko JPEG/PNG (AVIF/WebP z realnych sklepów → błąd „Unable to process provided image").
 - ✅ Weryfikacja: dodanie produktu przez UI działa end-to-end (licznik `products` rośnie).
 
-**Krok 1.6 — Zasilenie danymi testowymi (Agata Meble)**
-- Źródło: `https://www.agatameble.pl/meble/wypoczynkowe/sofy`
-- Działania:
-  - Skrypt w `scripts/` pobiera ~20–30 sof: nazwa, zdjęcie główne, kod produktu, parametry (wymiary/kolor/materiał/styl jeśli dostępne), cena, URL.
-  - ID Optima = `AGATA-<kod_produktu>`.
-  - Zdjęcia → S3; parametry z opisu domyka Haiku 4.5 (opisy bywają nieustrukturyzowane); załadowanie przez `/products`.
-  - Respektować `robots.txt` i rate limit; jeśli strona renderuje treść w JS — headless (Playwright).
-- ✅ Weryfikacja: ~20–30 produktów w bazie z wektorami i parametrami; wśród nich sofa użyta w PDF „test pozytywny".
+**Krok 1.6 — Zasilenie danymi testowymi (BRW)** — ✅ ZROBIONE
+- **Pivot z Agaty:** Agata (`agatameble.pl`) za Cloudflare managed challenge → automatyczny scraping odpada (nie obchodzimy anti-bot). Wybór **BRW** (`brw.pl`): `robots.txt` pozwala (`Disallow: /` tylko dla bota „Fasterfox"; `*` ma wykluczenia paginacji/parametrów, ale kategorie dozwolone), brak Cloudflare, kategoria sof ma **JSON-LD dla 36 produktów** w SSR HTML.
+- `scripts/scrape-brw.mjs`: parsuje JSON-LD kategorii sof → `rawdata/brw-products.json` (name, image JPG, price, url, code). `scripts/seed.mjs`: dla każdej → download zdjęcia (JPEG, bez `sharp`) → presign+upload → `/extract`(nazwa) → `/products` z ID `BRW-<code>`, rate limit 0,5s.
+- ✅ Weryfikacja: **25/25 załadowane**, `{ produkty: 28, z_embeddingiem: 28 }`.
+
+> 🎉 **Faza 1 (baza + zasilanie) ukończona.** Dalej: Faza 2 — wyszukiwanie.
 
 ### Faza 2 — Wyszukiwanie
 
