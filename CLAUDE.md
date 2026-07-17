@@ -26,7 +26,13 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ Krok 1.1 — RDS PostgreSQL 16.14 + pgvector + tabela `products` (RDS publiczny, Lambdy poza VPC). Migracja: `scripts/migrate.mjs`.
 - ✅ Krok 1.2 — `/uploads/presign` (Lambda py3.13 + HTTP API). Presigned **path-style** (unika 307/SignatureDoesNotMatch). Test: `scripts/test-presign.mjs`.
 - ✅ Krok 1.3 — `/extract` (Haiku 4.5 via Bedrock converse → JSON parametrów). Test: `scripts/test-extract.mjs`.
-- ▶️ Następny: **Krok 1.4** — `/products` (embedding Titan + atomowy zapis do bazy).
+- ✅ Krok 1.4 — `/products` (zdjęcie→Titan 1024→atomowy INSERT). Sterownik pg8000 vendorowany. Testy: `scripts/test-products.mjs`, `scripts/db-count.mjs`.
+- ▶️ Następne: **Krok 1.5** (panel IngestPage – frontend) i **1.6** (zasilenie danymi z Agaty).
+
+## Gotchas (git bash / AWS)
+- `MSYS_NO_PATHCONV=1` przed komendami z argumentami `/aws/...` (np. `aws logs`) — inaczej git bash konwertuje na ścieżkę Windows.
+- Env do node przez `export API=...` (nie `API=... && node` — to nie eksportuje).
+- Presigned S3: path-style + nie podpisywać Content-Type. Titan: obraz min. sensownego rozmiaru (1×1 = błąd).
 
 ## Zablokowane decyzje
 - **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)

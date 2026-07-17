@@ -11,6 +11,8 @@ import * as path from 'path';
 
 // Model Bedrock (EU inference profile) do ekstrakcji/NLP.
 const HAIKU_MODEL_ID = 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
+// Model embeddingów (Titan Multimodal, 1024 wym.).
+const EMBED_MODEL_ID = 'amazon.titan-embed-image-v1';
 
 /**
  * Główny stack maxai.
@@ -127,6 +129,33 @@ export class MaxaiStack extends Stack {
       path: '/extract',
       methods: [HttpMethod.POST],
       integration: new HttpLambdaIntegration('ExtractInteg', extractFn),
+    });
+
+    // --- Lambda: zapis produktu (embedding Titan + INSERT do RDS) ---
+    const productsFn = new lambda.Function(this, 'ProductsFn', {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'handler.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/lambdas/products')),
+      environment: {
+        FILES_BUCKET: filesBucket.bucketName,
+        DB_SECRET_ARN: db.secret!.secretArn,
+        EMBED_MODEL_ID: EMBED_MODEL_ID,
+      },
+      timeout: Duration.seconds(30),
+      memorySize: 512,
+    });
+    filesBucket.grantRead(productsFn);
+    db.secret!.grantRead(productsFn);
+    productsFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: ['*'],
+      }),
+    );
+    httpApi.addRoutes({
+      path: '/products',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('ProductsInteg', productsFn),
     });
 
     // --- Outputs ---

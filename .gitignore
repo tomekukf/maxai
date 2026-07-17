@@ -36,3 +36,8 @@ Thumbs.db
 scripts/.cache/
 data/raw/
 *.log
+
+# --- Vendorowane zależności Lambdy products (pg8000) — instalowane build-em ---
+backend/lambdas/products/*
+!backend/lambdas/products/handler.py
+!backend/lambdas/products/requirements.txt

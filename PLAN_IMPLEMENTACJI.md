@@ -148,9 +148,11 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 - Działania: opis → JSON parametrów. Kod: `backend/lambdas/extract/handler.py` (Bedrock `converse`, model `eu.anthropic.claude-haiku-4-5-...`, `temperature:0`). Route `/extract`. IAM `bedrock:InvokeModel`. Test: `scripts/test-extract.mjs`.
 - ✅ Weryfikacja: przykładowy opis → poprawny JSON (nazwa, wymiary, kolor, materiały, cena, kod).
 
-**Krok 1.4 — Lambda `/products` (Titan + zapis)**
-- Działania: embedding głównego zdjęcia (Titan) + zapis atomowy wiersza.
-- ✅ Weryfikacja: dodanie produktu → wiersz w bazie z niepustym wektorem i parametrami.
+**Krok 1.4 — Lambda `/products` (Titan + zapis)** — ✅ ZROBIONE
+- `backend/lambdas/products/handler.py`: zdjęcie z S3 → embedding Titan (1024) → atomowy INSERT do `products`. Sterownik **pg8000** (czysty Python) vendorowany (`pip install -r requirements.txt -t .`; gitignore poza handler.py+requirements.txt). SSL bez weryfikacji CA (MVP).
+- IAM: `s3:GetObject`, `bedrock:InvokeModel`, `secretsmanager:GetSecretValue`. Route `/products`. Testy: `scripts/test-products.mjs` (generuje PNG 64×64 — Titan odrzuca 1×1: „Truncated File Read"), `scripts/db-count.mjs`.
+- ✅ Weryfikacja: `HTTP 200 {id}`, `{ produkty:1, z_embeddingiem:1 }`.
+- **Build fresh clone** (przed `cdk deploy`): `python -m pip install -r backend/lambdas/products/requirements.txt -t backend/lambdas/products/`.
 
 **Krok 1.5 — Panel `IngestPage`**
 - Działania: formularz (upload zdjęć, opis, ID Optima), integracja z API.
