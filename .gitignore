@@ -1,0 +1,38 @@
+# --- Node / Frontend ---
+node_modules/
+dist/
+.npm/
+*.local
+.vite/
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+*.egg-info/
+.pytest_cache/
+
+# --- AWS CDK / Infra ---
+cdk.out/
+*.cdk.staging/
+.cdk.staging/
+
+# --- AWS / sekrety ---
+.aws/
+*.pem
+credentials
+aws-exports.js
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Dane robocze / scraper ---
+scripts/.cache/
+data/raw/
+*.log

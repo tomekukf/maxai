@@ -1,0 +1,69 @@
+Dokumentacja Wymagań Technicznych: PoC Asystenta Sprzedaży (Integracja wizualizacji z systemem Optima)
+1. Cel Projektu
+Stworzenie webowej aplikacji w formie Proof of Concept (PoC) wspierającej pracowników salonu meblowego w szybkiej identyfikacji produktów z PDF-ów (wizualizacji architektonicznych) i dopasowywaniu ich do asortymentu dostępnego w wewnętrznym systemie ERP/CRM (Optima). Aplikacja ma skrócić czas wyszukiwania produktów z godzin do minut, wykorzystując analizę obrazu i modele LLM.
+
+2. Architektura i Stos Technologiczny (AWS Free Tier)
+Projekt oparty w 100% o chmurę AWS z wykorzystaniem usług bezserwerowych w celu minimalizacji kosztów początkowych. Proces wdrożenia (CI/CD) musi być zautomatyzowany.
+
+Repozytorium: GitHub.
+
+CI/CD i Hosting (Frontend): AWS Amplify (automatyczne budowanie po pushu na gałąź main).
+
+Frontend: React (Vite) + TypeScript.
+
+UI/UX: Tailwind CSS + shadcn/ui.
+
+Narzędzia Frontendowe: react-pdf, react-image-crop.
+
+Backend (API): Amazon API Gateway + AWS Lambda (Python lub Node.js).
+
+Baza Danych: Amazon RDS (PostgreSQL z rozszerzeniem pgvector do wyszukiwania wektorowego).
+
+Storage: Amazon S3 (przechowywanie plików PDF oraz zdjęć referencyjnych produktów).
+
+AI - Analiza obrazu: Amazon Rekognition (detekcja obiektów na wizualizacji).
+
+AI - Generowanie wektorów (Embeddings): Amazon Bedrock (model Amazon Titan Multimodal Embeddings).
+
+AI - Orkiestracja i NLP: Amazon Bedrock (model Anthropic Claude 3 Haiku).
+
+3. Wymagania Funkcjonalne – Ścieżka Wyszukiwania (Flow Pracownika)
+Główny proces biznesowy, w którym pracownik analizuje wizualizację dostarczoną przez architekta.
+
+Wgranie pliku: Interfejs umożliwia przeciągnięcie i upuszczenie pliku PDF z wizualizacją.
+
+Podgląd i interakcja: Aplikacja renderuje stronę PDF w przeglądarce.
+
+Automatyczna detekcja obiektów: Po wgraniu pliku, system (Amazon Rekognition) automatycznie nakłada na obraz interaktywne ramki wokół rozpoznanych mebli (np. kanapa, stół, lampa).
+
+Korekta ręczna: Użytkownik ma możliwość zignorowania ramek i ręcznego zaznaczenia (wykadrowania) interesującego go fragmentu wizualizacji.
+
+Interakcja z AI (LLM): Po wybraniu obiektu, Claude 3 Haiku weryfikuje czy potrzebuje więcej kontekstu (np. pożądane wymiary, materiał). Aplikacja wyświetla krótki formularz z predefiniowanymi przyciskami (np. "Welur", "Skóra") oraz polem na tekst swobodny.
+
+Wyszukiwanie hybrydowe: System przetwarza wycięty obraz na wektor (Titan Multimodal), buduje zapytanie łączące cechy wizualne i tekstowe z LLM, a następnie przeszukuje bazę pgvector.
+
+Prezentacja wyników: Interfejs wyświetla 3 najlepiej dopasowane propozycje ze zdjęciami, parametrami technicznymi i numerami ID z systemu Optima, gotowymi do skopiowania.
+
+4. Wymagania Funkcjonalne – Ścieżka Zasilania Bazy (Data Ingestion)
+Panel do łatwego dodawania nowych produktów do bazy wektorowej, zapewniający ciągłą aktualność systemu.
+
+Formularz dodawania: Obsługa wgrywania jednego lub więcej zdjęć produktu (S3).
+
+Pola wprowadzania: Miejsce na wklejenie surowego, niesformatowanego opisu od producenta oraz pola na identyfikator ID produktu z Optimy.
+
+Ekstrakcja danych (LLM): Wysłanie niesformatowanego tekstu do modelu Claude 3 Haiku w celu zrzucenia parametrów (wymiary, kolor, styl, materiał) do ustrukturyzowanego formatu JSON.
+
+Wektoryzacja: Zamiana głównego zdjęcia produktu na wektor liczbowy przy użyciu modelu Titan Multimodal.
+
+Zapis: Atomowa operacja zapisu wektora, parametrów JSON, linku S3 oraz ID Optimy jako pojedynczego wiersza w bazie PostgreSQL.
+
+5. Konfiguracja CI/CD i Infrastruktury
+Wymagania dotyczące pracy deweloperskiej i infrastruktury pod prototyp.
+
+Lokalne środowisko: Konfiguracja pozwalająca na uruchomienie frontendu i backendu lokalnie, z podłączeniem do chmurowych baz i modeli AI (odpowiednie polityki IAM dla dewelopera).
+
+Integracja GitHub - Amplify: AWS Amplify nasłuchuje zdarzeń (webhook) na wybranej gałęzi w GitHub.
+
+Automatyczne wdrożenia: Każdy push wyzwala proces instalacji zależności, budowy wersji produkcyjnej aplikacji frontendowej i automatyczną publikację pod adresem wygenerowanym przez Amplify.
+
+Infrastruktura jako Kod (Opcjonalnie): Wskazane zdefiniowanie zasobów backendowych (Lambda, API Gateway) w ramach AWS SAM (Serverless Application Model) lub AWS CDK, ułatwiające zarządzanie wdrożeniem i replikację środowiska.
