@@ -158,6 +158,30 @@ export class MaxaiStack extends Stack {
       integration: new HttpLambdaIntegration('ProductsInteg', productsFn),
     });
 
+    // --- Lambda: wyszukiwanie substytutów (embedding wycinka → pgvector) ---
+    const searchFn = new lambda.Function(this, 'SearchFn', {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'handler.lambda_handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/lambdas/search')),
+      environment: {
+        FILES_BUCKET: filesBucket.bucketName,
+        DB_SECRET_ARN: db.secret!.secretArn,
+        EMBED_MODEL_ID: EMBED_MODEL_ID,
+      },
+      timeout: Duration.seconds(30),
+      memorySize: 512,
+    });
+    filesBucket.grantRead(searchFn); // presigned GET wyników
+    db.secret!.grantRead(searchFn);
+    searchFn.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['bedrock:InvokeModel'], resources: ['*'] }),
+    );
+    httpApi.addRoutes({
+      path: '/search',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('SearchInteg', searchFn),
+    });
+
     // --- Outputs ---
     new CfnOutput(this, 'FilesBucketName', {
       value: filesBucket.bucketName,

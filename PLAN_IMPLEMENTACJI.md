@@ -174,9 +174,10 @@ Każdy krok ma **kryterium weryfikacji** — akceptujemy krok, gdy jest spełnio
 **Krok 2.2 — `ImageCropper` (react-image-crop)**
 - ✅ Weryfikacja: kadrowanie zwraca poprawny wycinek obrazu.
 
-**Krok 2.3 — Lambda `/search` (Titan + pgvector)**
-- Działania: embedding wycinka + zapytanie wektorowe (podobieństwo wizualne = sygnał główny; filtry opcjonalne, nie domyślne).
-- ✅ Weryfikacja: wycinek zwraca TOP 3 najbliższych wizualnie produktów z bazy.
+**Krok 2.3 — Lambda `/search` (Titan + pgvector)** — ✅ ZROBIONE (zrobione jako pierwsze w Fazie 2 — walidacja rdzenia headless)
+- `backend/lambdas/search/handler.py`: base64 wycinka → Titan embedding → pgvector cosine (`ORDER BY similarity DESC LIMIT n`) → TOP N z presigned GET zdjęć. pg8000 vendorowany. Route `/search`. Test: `scripts/test-search.mjs`.
+- Gotcha pg8000: NIE powtarzać named-param (`:q`) i NIE parametryzować `LIMIT` — psuło liczbę wyników; użyć aliasu w `ORDER BY` + `LIMIT <int>`.
+- ✅ **Weryfikacja rdzenia:** substytuty (sofa spoza bazy) → TOP 3 podobnych (sim 0,68–0,77); dokładny (sofa w bazie) → jej wariant #1 (sim 1,0) + własna pozycja #2 (0,92). **Wyszukiwarka substytutów działa na realnych danych.**
 
 **Krok 2.4 — `ResultsList`**
 - Działania: 3 propozycje (zdjęcie, parametry, ID Optima do skopiowania).

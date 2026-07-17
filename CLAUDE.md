@@ -29,7 +29,9 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ Krok 1.4 — `/products` (zdjęcie→Titan 1024→atomowy INSERT). Sterownik pg8000 vendorowany. Testy: `scripts/test-products.mjs`, `scripts/db-count.mjs`.
 - ✅ Krok 1.5 — panel `IngestPage` (React 18 + Vite 5 + TS + Tailwind 3 w `frontend/`). Konwersja obrazu→JPEG w przeglądarce (Titan tylko JPEG/PNG).
 - ✅ Krok 1.6 — zasilenie **BRW** (Agata za Cloudflare → pivot). `scrape-brw.mjs` (JSON-LD) + `seed.mjs`. Baza: 28 produktów z embeddingiem.
-- 🎉 **Faza 1 ukończona.** ▶️ Następne: **Faza 2 — wyszukiwanie** (`/search`, PDF viewer, cropper, wyniki).
+- 🎉 **Faza 1 ukończona.**
+- ✅ Krok 2.3 — `/search` (base64 wycinka → Titan → pgvector cosine → TOP N). **Rdzeń (substytuty) udowodniony na realnych danych.** Test: `scripts/test-search.mjs`.
+- ▶️ Reszta Fazy 2 (frontend): PdfViewer (react-pdf), ImageCropper (react-image-crop), ResultsList, SearchPage; potem test na 2 wizualizacjach (Krok 2.5).
 
 ## Gotchas (git bash / AWS)
 - `MSYS_NO_PATHCONV=1` przed komendami z argumentami `/aws/...` (np. `aws logs`) — inaczej git bash konwertuje na ścieżkę Windows.
