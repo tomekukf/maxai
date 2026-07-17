@@ -31,12 +31,12 @@ for (const b of blocks) {
           : [];
     for (const it of items) {
       if (it?.['@type'] !== 'Product') continue;
-      const imageUrl = Array.isArray(it.image) ? it.image[0] : it.image;
+      const images = Array.isArray(it.image) ? it.image : it.image ? [it.image] : [];
       const m = /,(\d+)(?:$|\?)/.exec(it.url || '');
       const code = m ? m[1] : (it.url || '').split('/').pop();
       products.push({
         name: it.name,
-        imageUrl,
+        images,
         price: it.offers?.price ?? null,
         url: it.url,
         code,
@@ -47,7 +47,9 @@ for (const b of blocks) {
 
 // dedup po kodzie
 const seen = new Set();
-const uniq = products.filter((p) => p.code && p.imageUrl && !seen.has(p.code) && seen.add(p.code));
+const uniq = products.filter(
+  (p) => p.code && p.images.length && !seen.has(p.code) && seen.add(p.code),
+);
 
 writeFileSync('rawdata/brw-products.json', JSON.stringify(uniq, null, 2));
 console.log('produktów:', uniq.length);

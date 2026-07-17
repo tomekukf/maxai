@@ -9,7 +9,7 @@ const btnSecondary =
   'mt-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50';
 
 export default function IngestPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [optimaId, setOptimaId] = useState('');
   const [name, setName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -38,8 +38,8 @@ export default function IngestPage() {
 
   async function handleSave() {
     setMsg(null);
-    if (!file) {
-      setMsg({ kind: 'err', text: 'Wybierz zdjęcie produktu.' });
+    if (!files.length) {
+      setMsg({ kind: 'err', text: 'Wybierz co najmniej jedno zdjęcie.' });
       return;
     }
     if (!optimaId.trim()) {
@@ -57,16 +57,17 @@ export default function IngestPage() {
     }
     setBusy(true);
     try {
-      const imageKey = await uploadFile(file);
-      const { id } = await saveProduct({
+      const imageKeys: string[] = [];
+      for (const f of files) imageKeys.push(await uploadFile(f));
+      const { id, images } = await saveProduct({
         optimaId: optimaId.trim(),
         name: name.trim() || undefined,
         sourceUrl: sourceUrl.trim() || undefined,
-        imageKey,
+        imageKeys,
         params,
       });
-      setMsg({ kind: 'ok', text: `Zapisano produkt (id: ${id}).` });
-      setFile(null);
+      setMsg({ kind: 'ok', text: `Zapisano produkt (id: ${id}, zdjęć: ${images}).` });
+      setFiles([]);
       setDescription('');
       setParamsText('');
       setName('');
@@ -88,14 +89,19 @@ export default function IngestPage() {
       </header>
 
       <main className="mx-auto max-w-3xl space-y-5 px-4 py-6">
-        <Field label="Zdjęcie produktu">
+        <Field label="Zdjęcia produktu (można wiele)">
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            multiple
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
             className="block w-full text-sm"
           />
-          {file && <p className="mt-1 text-xs text-slate-500">{file.name}</p>}
+          {files.length > 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              {files.length} plik(ów): {files.map((f) => f.name).join(', ')}
+            </p>
+          )}
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

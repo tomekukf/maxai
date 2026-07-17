@@ -26,7 +26,9 @@ const c = new pg.Client({
 
 await c.connect();
 const r = await c.query(
-  'SELECT count(*)::int AS produkty, count(embedding)::int AS z_embeddingiem FROM products',
+  'SELECT (SELECT count(*) FROM products)::int AS produkty, ' +
+    '(SELECT count(*) FROM product_images)::int AS zdjecia, ' +
+    '(SELECT count(embedding) FROM product_images)::int AS z_embeddingiem',
 );
 console.log(r.rows[0]);
 await c.end();

@@ -88,12 +88,19 @@ def lambda_handler(event, _ctx):
 
     def query():
         conn = _db()
-        # :q tylko raz (w SELECT), ORDER BY po aliasie, LIMIT jako liczba (bezpieczne w pg8000).
+        # Multi-image: liczymy podobieństwo per zdjęcie, dedupujemy po produkcie
+        # (najlepiej pasujące ujęcie), potem TOP N produktów. :q tylko raz (najgłębiej).
         return conn.run(
-            "SELECT optima_id, name, params, image_s3_url, "
-            "1 - (embedding <=> CAST(:q AS vector)) AS similarity "
-            "FROM products "
-            "ORDER BY similarity DESC "
+            "SELECT * FROM ("
+            "  SELECT DISTINCT ON (product_id) optima_id, name, params, image_s3_url, sim"
+            "  FROM ("
+            "    SELECT p.id AS product_id, p.optima_id, p.name, p.params, pi.image_s3_url,"
+            "           1 - (pi.embedding <=> CAST(:q AS vector)) AS sim"
+            "    FROM product_images pi JOIN products p ON p.id = pi.product_id"
+            "  ) x"
+            "  ORDER BY product_id, sim DESC"
+            ") y "
+            "ORDER BY sim DESC "
             f"LIMIT {top_k}",
             q=vec,
         )

@@ -66,10 +66,10 @@ export async function extractParams(description: string): Promise<Record<string,
 export async function saveProduct(input: {
   optimaId: string;
   name?: string;
-  imageKey: string;
+  imageKeys: string[];
   sourceUrl?: string;
   params: Record<string, unknown>;
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; images: number }> {
   const r = await fetch(`${API_URL}/products`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

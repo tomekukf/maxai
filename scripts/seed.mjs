@@ -42,24 +42,23 @@ let ok = 0;
 for (const [i, p] of products.entries()) {
   const tag = `[${i + 1}/${products.length}]`;
   try {
-    // 1) pobierz zdjęcie — preferuj większy wariant -large (lepszy embedding)
-    const bytes = await fetchBestImage(p.imageUrl);
-    if (!bytes) {
-      console.log(`${tag} SKIP obraz`);
-      continue;
+    // 1-2) pobierz i wgraj WSZYSTKIE zdjęcia produktu (preferuj -large)
+    const imageKeys = [];
+    for (const url of p.images ?? []) {
+      const bytes = await fetchBestImage(url);
+      if (!bytes) continue;
+      const pre = await (
+        await fetch(`${API}/uploads/presign`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ filename: `${p.code}-${imageKeys.length}.jpg`, prefix: 'product-images' }),
+        })
+      ).json();
+      const put = await fetch(pre.uploadUrl, { method: 'PUT', body: bytes });
+      if (put.ok) imageKeys.push(pre.key);
     }
-
-    // 2) presign + upload
-    const pre = await (
-      await fetch(`${API}/uploads/presign`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ filename: `${p.code}.jpg`, prefix: 'product-images' }),
-      })
-    ).json();
-    const put = await fetch(pre.uploadUrl, { method: 'PUT', body: bytes });
-    if (!put.ok) {
-      console.log(`${tag} SKIP upload HTTP ${put.status}`);
+    if (!imageKeys.length) {
+      console.log(`${tag} SKIP brak zdjęć`);
       continue;
     }
 
@@ -87,7 +86,7 @@ for (const [i, p] of products.entries()) {
       body: JSON.stringify({
         optimaId: `BRW-${p.code}`,
         name: p.name,
-        imageKey: pre.key,
+        imageKeys,
         sourceUrl: p.url,
         params,
       }),
@@ -95,7 +94,7 @@ for (const [i, p] of products.entries()) {
     const out = await save.json();
     if (save.ok) {
       ok++;
-      console.log(`${tag} OK  ${p.name.slice(0, 45)}  → ${out.id}`);
+      console.log(`${tag} OK  ${p.name.slice(0, 40)}  (${imageKeys.length} zdj) → ${out.id}`);
     } else {
       console.log(`${tag} FAIL ${save.status} ${JSON.stringify(out).slice(0, 120)}`);
     }
