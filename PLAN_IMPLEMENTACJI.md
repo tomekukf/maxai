@@ -140,6 +140,8 @@ kosinusa Titana niż konkurencyjne szare sofy.
 | `POST` | `/catalog/analyze-page` | (Faza 5) Obraz strony + tekst PDF → produkty `{nazwa, kategoria, box, params, opis, kod}[]` (Haiku 4.5 vision). |
 | `GET` | `/products/{id}` | (Faza 6) Szczegóły produktu: pełne `params`, atrybuty, wszystkie zdjęcia (presigned), odniesienie do katalogu. |
 | `PUT` | `/products/{id}` | (Faza 6) Edycja metadanych produktu (bez zmiany embeddingu). |
+| `POST` | `/catalogs` | (Faza 7) Utworzenie katalogu (import z panelu admina zwraca `catalogId`). |
+| `GET` | `/catalogs` | (Faza 7) Lista katalogów (nazwa, producent, liczba produktów). |
 | `GET` | `/catalogs/{id}/export` | (Faza 7) Eksport kolekcji: JSON (produkty + `attributes` + **embeddingi** + zdjęcia) do backupu/re-importu bez Bedrock. |
 | `POST` | `/products` (rozszerzenie) | (Faza 7) `images:[{key, embedding?, ...}]` — gotowy embedding pomija Titan (import kolekcji = 0 Bedrock). |
 
@@ -519,16 +521,35 @@ administracji rozwiązaniem + statystyki).
 **Krok 7.5 — Import/eksport kolekcji produktów/katalogów (panel admina)**
 - **Zasada (zablokowana decyzja):** kolekcje **powstają lokalnie** (bez vision na Bedrock). Panel admina
   służy do **wgrywania** gotowych kolekcji i ich **eksportu** (backup / transfer / re-import po czyszczeniu bazy).
-- **Eksport:** `GET /catalogs/{id}/export` → pakiet (JSON): metadane katalogu + produkty (`params`, `category`,
-  `subtype`, `manufacturerCode`, `optimaId`, `attributes`) **oraz embeddingi per zdjęcie** i klucze/URL zdjęć.
-  Opcjonalnie zip z obrazami (pełna przenośność). Embedding w eksporcie → **re-import bez Bedrock**.
-- **Import:** admin wgrywa pakiet → obrazy do S3 → zapis przez kanoniczny `/products` z **gotowym embeddingiem**
-  (bez Titana) i `describe:false` (bez vision) → **zero wywołań Bedrock**. Dedup po `(manufacturer, manufacturer_code)`.
-- **Rozszerzenie `/products`:** opcjonalne `embedding` per zdjęcie (`images:[{key, embedding?, attributes?, sortOrder?}]`)
-  — gdy podane, pomija Titan. Bez zmian dla dotychczasowych wywołań.
-- Format pakietu spójny z `rawdata/<kolekcja>/` (ekstraktory lokalne produkują od razu importowalny pakiet).
-- ✅ Weryfikacja: eksport kolekcji → wyczyszczenie bazy → import → identyczna liczba produktów i embeddingów,
-  **0 wywołań Bedrock** przy imporcie; wyszukiwanie działa jak przed czyszczeniem.
+- **Format paczki `collection.json`** (jedno źródło dla importu i eksportu):
+  `{ catalog:{name,manufacturer,domainCategory,pdfKey?,pageCount}, products:[{ name, optimaId?, category, subtype,
+  manufacturer, manufacturerCode, params, images:[{file, role, attributes?, embedding?}] }] }`.
+  Świeży katalog (z ekstrakcji lokalnej): bez `embedding` (Titan przy imporcie). Eksport: z `embedding` (re-import bez Bedrock).
+- **Import w przeglądarce (panel admina):** wybór folderu paczki `<input webkitdirectory>` (bez nowych zależności)
+  → parse `collection.json` → `POST /catalogs` (utworzenie) → per produkt: presign + upload zdjęć do S3 →
+  `POST /products` (`describe:false`; gdy paczka ma `embedding` → pomija Titan, inaczej Titan liczy raz). Pasek
+  postępu + obsługa duplikatów (dedup po kodzie). PDF (duży) wgrywa **skrypt lokalny** (aws cli), nie przeglądarka.
+- **Eksport:** `GET /catalogs/{id}/export` → `collection.json` z embeddingami + zdjęcia (klucze/URL lub zip).
+- **Nowe/rozszerzone endpointy:** `POST /catalogs` (create), `GET /catalogs` (lista), `GET /catalogs/{id}/export`;
+  `/products` — opcjonalne `embedding` per zdjęcie (`images:[{key, embedding?, attributes?, sortOrder?}]`, pomija Titan).
+- ✅ Weryfikacja: eksport → wyczyszczenie bazy → import przez panel → identyczna liczba produktów i embeddingów,
+  **0 wywołań Bedrock** przy re-imporcie; wyszukiwanie działa jak przed czyszczeniem.
+
+**Krok 7.6 — Onboarding katalogu: skrypt bootstrap + instrukcje dla Claude + gotowość panelu**
+- **Cel:** jedną komendą lokalnie przygotować dowolny katalog PDF do importu — skrypt sonduje PDF i **generuje
+  zestaw instrukcji dla Claude Code**, żeby ekstrakcja (różna per katalog) nie wymagała szukania „jak to zrobić".
+- **`scripts/prepare-catalog.mjs <pdf> <nazwa> [--manufacturer X] [--category Y]`** (lokalnie, bez AWS/Bedrock):
+  tworzy `rawdata/<nazwa>/`, sonduje PDF (liczba stron, rozkładówki, warstwa tekstu + próbka, obrazy osadzone,
+  wykrycie indeksu), renderuje kilka próbek stron, zapisuje `PROBE.json` oraz **`CLAUDE_INSTRUCTIONS.md`**
+  (dostosowana lista kroków: rozpoznaj układ, skopiuj i dostrój ekstraktor z szablonu, ustal mapowanie
+  prefiks-kodu→`subtype`, pola z warstwy tekstu, `category`, uruchom, zweryfikuj, wypisz `collection.json`).
+  Na końcu wypisuje: „poproś Claude: »przygotuj katalog <nazwa>«".
+- **Szablon ekstraktora:** `extract-maxlight.py` jako wzorzec (parametryzowany/kopiowany per katalog).
+- **Instrukcja end-to-end w panelu admina:** sekcja w `docs/admin-runbook.md` (render w zakładce Dokumentacja)
+  opisująca cały przepływ: 1) `node scripts/prepare-catalog.mjs …`, 2) „Claude, przygotuj katalog <nazwa>",
+  3) Import w panelu admina (Krok 7.5). Dzięki temu Claude i admin mają całość w jednym miejscu.
+- ✅ Weryfikacja: nowy (inny niż Maxlight) katalog PDF → skrypt → Claude wg instrukcji → `collection.json` + zdjęcia
+  → import w panelu → produkty w bazie i wyszukiwalne; **0 wywołań Bedrock vision** w całym procesie.
 
 ---
 

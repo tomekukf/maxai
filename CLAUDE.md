@@ -69,8 +69,10 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   handlowca (Wyszukiwanie + Katalog read-only) i panel admina za gate'em (`VITE_ADMIN_PASSWORD`) — Katalog
   (edycja/usuwanie), Zasilanie, Statystyki (`StatsPage`), Dokumentacja (runbook `docs/admin-runbook.md` renderowany
   przez `MarkdownLite`, `?raw` + `vite fs.allow:['..']`). Nawigacja na stanie (bez react-router). ⏳ Zostaje:
-  **7.5 import/eksport kolekcji** (eksport z embeddingami → re-import bez Bedrock; wymaga `GET /catalogs/{id}/export`
-  + `embedding` w `/products`), **7.4 Cognito** (twarde zabezpieczenie API). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
+  **7.5 import/eksport kolekcji** (import w przeglądarce: folder `webkitdirectory` → `POST /catalogs` + presign +
+  `/products`; eksport z embeddingami → re-import bez Bedrock; format `collection.json`), **7.6 onboarding katalogu**
+  (`scripts/prepare-catalog.mjs` sonduje PDF i generuje `CLAUDE_INSTRUCTIONS.md` dla mnie + instrukcja end-to-end
+  w `admin-runbook.md`), **7.4 Cognito** (twarde zabezpieczenie API). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)
