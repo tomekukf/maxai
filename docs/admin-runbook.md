@@ -15,6 +15,20 @@ Jedno źródło prawdy — edytuj ten plik w repo.
   - Opis wizualny + rerank: Claude Sonnet 4.5.
 - **Region:** `eu-central-1`. **IaC:** AWS CDK (TypeScript) w `infra/`.
 
+## Uruchomienie lokalne (frontend)
+
+1. **Konfiguracja** — utwórz `frontend/.env.local` (wzór: `frontend/.env.example`):
+   ```
+   VITE_API_URL=https://<api-id>.execute-api.eu-central-1.amazonaws.com   # output ApiUrl
+   VITE_COGNITO_CLIENT_ID=<UserPoolClientId>                              # output UserPoolClientId
+   VITE_COGNITO_REGION=eu-central-1
+   ```
+   Konkretne wartości dla tego środowiska: **`SECRETS.local.md`** (w katalogu głównym repo, poza gitem).
+2. **Start:** `cd frontend && npm install && npm run dev` → `http://localhost:5173`.
+3. **Panel handlowca** działa bez logowania (Wyszukiwanie, Katalog).
+4. **Panel admina:** kliknij „Admin →" i zaloguj się kontem z grupy `admin`.
+   Login/hasło startowe: patrz **`SECRETS.local.md`** (nie trzymamy haseł w repo).
+
 ## Zasada kosztowa (WAŻNE)
 
 - **Tworzenie kolekcji odbywa się LOKALNIE** (analiza katalogów: ekstrakcja, klasyfikacja, opis),

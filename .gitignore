@@ -25,6 +25,7 @@ cdk.out/
 *.pem
 credentials
 aws-exports.js
+SECRETS.local.md
 
 # --- IDE / OS ---
 .idea/
