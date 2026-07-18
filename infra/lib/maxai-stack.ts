@@ -103,6 +103,7 @@ export class MaxaiStack extends Stack {
         allowMethods: [
           CorsHttpMethod.GET,
           CorsHttpMethod.POST,
+          CorsHttpMethod.PUT,
           CorsHttpMethod.DELETE,
           CorsHttpMethod.OPTIONS,
         ],
@@ -184,9 +185,11 @@ export class MaxaiStack extends Stack {
       methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.DELETE],
       integration: productsInteg,
     });
+    // Uwaga: zachowujemy nazwę zmiennej {optimaId} (rename na {id} powoduje konflikt route'ów
+    // przy deployu). Ścieżka przyjmuje UUID produktu; handler czyta id/optimaId zamiennie.
     httpApi.addRoutes({
       path: '/products/{optimaId}',
-      methods: [HttpMethod.DELETE],
+      methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
       integration: productsInteg,
     });
 

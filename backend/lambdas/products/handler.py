@@ -232,19 +232,24 @@ def _create(body):
 
 def _list():
     rows = _db().run(
-        "SELECT p.optima_id, p.name, p.params, "
+        "SELECT p.id, p.optima_id, p.name, p.params, p.source, p.category, p.subtype, p.manufacturer_code, "
         "(SELECT image_s3_url FROM product_images pi WHERE pi.product_id = p.id "
         " ORDER BY sort_order, created_at LIMIT 1) AS primary_image, "
         "(SELECT count(*) FROM product_images pi WHERE pi.product_id = p.id) AS image_count "
         "FROM products p ORDER BY p.created_at DESC"
     )
     items = []
-    for optima_id, name, params, primary_image, image_count in rows:
+    for pid, optima_id, name, params, source, category, subtype, mfr_code, primary_image, image_count in rows:
         items.append(
             {
+                "id": str(pid),
                 "optimaId": optima_id,
                 "name": name,
                 "params": params,
+                "source": source,
+                "category": category,
+                "subtype": subtype,
+                "manufacturerCode": mfr_code,
                 "imageUrl": _presign_get(primary_image) if primary_image else None,
                 "imageCount": int(image_count),
             }
@@ -252,26 +257,87 @@ def _list():
     return _resp(200, {"items": items})
 
 
-def _delete(optima_id):
-    conn = _db()
-    if optima_id:
-        img_rows = conn.run(
-            "SELECT pi.image_s3_url FROM product_images pi "
-            "JOIN products p ON p.id = pi.product_id WHERE p.optima_id = :oid",
-            oid=optima_id,
-        )
-        n = int(conn.run("SELECT count(*) FROM products WHERE optima_id = :oid", oid=optima_id)[0][0])
-    else:
-        img_rows = conn.run("SELECT image_s3_url FROM product_images")
-        n = int(conn.run("SELECT count(*) FROM products")[0][0])
+def _detail(pid):
+    rows = _db().run(
+        "SELECT p.optima_id, p.name, p.params, p.source, p.category, p.subtype, p.manufacturer, "
+        "p.manufacturer_code, p.catalog_page, c.name, c.pdf_s3_url "
+        "FROM products p LEFT JOIN catalogs c ON c.id = p.catalog_id "
+        "WHERE p.id = CAST(:id AS uuid)",
+        id=pid,
+    )
+    if not rows:
+        return _resp(404, {"error": "Nie znaleziono produktu"})
+    (optima_id, name, params, source, category, subtype, manufacturer, mfr_code,
+     catalog_page, catalog_name, catalog_pdf) = rows[0]
+    imgs = _db().run(
+        "SELECT image_s3_url, attributes, sort_order FROM product_images "
+        "WHERE product_id = CAST(:id AS uuid) ORDER BY sort_order, created_at",
+        id=pid,
+    )
+    images = [{"imageUrl": _presign_get(u), "attributes": a, "sortOrder": so} for (u, a, so) in imgs]
+    product = {
+        "id": pid, "optimaId": optima_id, "name": name, "params": params, "source": source,
+        "category": category, "subtype": subtype, "manufacturer": manufacturer,
+        "manufacturerCode": mfr_code, "images": images,
+    }
+    if source == "catalog" and catalog_pdf:
+        product["catalog"] = {
+            "name": catalog_name, "page": catalog_page, "pdfUrl": _presign_get(catalog_pdf),
+        }
+    return _resp(200, {"product": product})
 
+
+# Edytowalne metadane (bez ruszania embeddingu/zdjęć).
+_EDITABLE = {
+    "name": "name", "optimaId": "optima_id", "category": "category", "subtype": "subtype",
+    "sourceUrl": "source_url", "manufacturer": "manufacturer", "manufacturerCode": "manufacturer_code",
+}
+
+
+def _update(pid, body):
+    if not pid:
+        return _resp(400, {"error": "Brak id"})
+    sets, kw = [], {"id": pid}
+    for key, col in _EDITABLE.items():
+        if key in body:
+            sets.append(f"{col} = :{col}")
+            kw[col] = body[key]
+    if "params" in body:
+        sets.append("params = CAST(:params AS jsonb)")
+        kw["params"] = json.dumps(body["params"], ensure_ascii=False)
+    if not sets:
+        return _resp(400, {"error": "Brak pól do aktualizacji"})
+    try:
+        rows = _db().run(
+            f"UPDATE products SET {', '.join(sets)} WHERE id = CAST(:id AS uuid) RETURNING id", **kw
+        )
+    except Exception as e:  # noqa: BLE001
+        if _is_dup(str(e)):
+            return _resp(409, {"error": "Kod produktu już istnieje (manufacturer+code)"})
+        raise
+    if not rows:
+        return _resp(404, {"error": "Nie znaleziono produktu"})
+    return _resp(200, {"id": str(rows[0][0]), "updated": True})
+
+
+def _delete_by_id(pid):
+    conn = _db()
+    img_rows = conn.run(
+        "SELECT image_s3_url FROM product_images WHERE product_id = CAST(:id AS uuid)", id=pid
+    )
+    n = int(conn.run("SELECT count(*) FROM products WHERE id = CAST(:id AS uuid)", id=pid)[0][0])
     for (url,) in img_rows:
         _delete_s3(url)
+    conn.run("DELETE FROM products WHERE id = CAST(:id AS uuid)", id=pid)  # cascade → product_images
+    return _resp(200, {"deleted": n})
 
-    if optima_id:
-        conn.run("DELETE FROM products WHERE optima_id = :oid", oid=optima_id)  # cascade → product_images
-    else:
-        conn.run("DELETE FROM products")  # cascade
+
+def _delete_all():
+    conn = _db()
+    for (url,) in conn.run("SELECT image_s3_url FROM product_images"):
+        _delete_s3(url)
+    n = int(conn.run("SELECT count(*) FROM products")[0][0])
+    conn.run("DELETE FROM products")  # cascade
     return _resp(200, {"deleted": n})
 
 
@@ -289,15 +355,18 @@ def _with_retry(fn):
 
 def lambda_handler(event, _ctx):
     method = event.get("requestContext", {}).get("http", {}).get("method", "POST")
+    pp = event.get("pathParameters") or {}
+    pid = pp.get("id") or pp.get("optimaId")  # ścieżka używa zmiennej {optimaId}, ale przyjmujemy UUID
     if method == "GET":
-        return _with_retry(_list)
+        return _with_retry((lambda: _detail(pid)) if pid else _list)
     if method == "DELETE":
-        optima_id = (event.get("pathParameters") or {}).get("optimaId")
-        return _with_retry(lambda: _delete(optima_id))
+        return _with_retry((lambda: _delete_by_id(pid)) if pid else _delete_all)
     try:
         body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:
         return _resp(400, {"error": "Nieprawidłowy JSON"})
+    if method == "PUT":
+        return _with_retry(lambda: _update(pid, body))
     return _create(body)
 
 

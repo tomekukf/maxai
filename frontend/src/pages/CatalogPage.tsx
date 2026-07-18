@@ -1,10 +1,25 @@
-import { useEffect, useState } from 'react';
-import { listProducts, deleteProduct, deleteAllProducts, type Product } from '../lib/api';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  listProducts,
+  deleteProduct,
+  deleteAllProducts,
+  getProduct,
+  updateProduct,
+  type Product,
+  type ProductDetail,
+  type ProductPatch,
+} from '../lib/api';
+
+const btn = 'rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50';
 
 export default function CatalogPage() {
   const [items, setItems] = useState<Product[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('');
+  const [sub, setSub] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
 
   function load() {
     setErr(null);
@@ -12,17 +27,40 @@ export default function CatalogPage() {
       .then(setItems)
       .catch((e) => setErr((e as Error).message));
   }
+  useEffect(load, []);
 
-  useEffect(() => {
-    load();
-  }, []);
+  const categories = useMemo(
+    () => [...new Set((items ?? []).map((p) => p.category).filter(Boolean))] as string[],
+    [items],
+  );
+  const subtypes = useMemo(
+    () =>
+      [...new Set((items ?? []).filter((p) => !cat || p.category === cat).map((p) => p.subtype).filter(Boolean))] as string[],
+    [items, cat],
+  );
 
-  async function onDeleteOne(optimaId: string) {
-    if (!confirm(`Usunąć produkt ${optimaId} (wraz ze zdjęciem)?`)) return;
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return (items ?? []).filter((p) => {
+      if (cat && p.category !== cat) return false;
+      if (sub && p.subtype !== sub) return false;
+      if (!needle) return true;
+      const code = String((p.params?.codes as string[] | undefined)?.join(' ') ?? p.manufacturerCode ?? '');
+      return (
+        (p.name ?? '').toLowerCase().includes(needle) ||
+        (p.optimaId ?? '').toLowerCase().includes(needle) ||
+        code.toLowerCase().includes(needle) ||
+        (p.subtype ?? '').toLowerCase().includes(needle)
+      );
+    });
+  }, [items, q, cat, sub]);
+
+  async function onDeleteOne(id: string, label: string) {
+    if (!confirm(`Usunąć produkt ${label} (wraz ze zdjęciami)?`)) return;
     setBusy(true);
     try {
-      await deleteProduct(optimaId);
-      setItems((cur) => (cur ? cur.filter((p) => p.optimaId !== optimaId) : cur));
+      await deleteProduct(id);
+      setItems((cur) => (cur ? cur.filter((p) => p.id !== id) : cur));
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -49,13 +87,13 @@ export default function CatalogPage() {
       <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Katalog produktów {items && `(${items.length})`}</h2>
-            <p className="text-sm text-slate-500">Wszystkie produkty w bazie — ID Optima i zdjęcie.</p>
+            <h2 className="text-lg font-semibold">
+              Katalog produktów {items && `(${filtered.length}/${items.length})`}
+            </h2>
+            <p className="text-sm text-slate-500">Szukaj, filtruj, kliknij produkt po szczegóły i edycję.</p>
           </div>
           <div className="ml-auto flex gap-2">
-            <button onClick={load} disabled={busy} className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50">
-              Odśwież
-            </button>
+            <button onClick={load} disabled={busy} className={btn}>Odśwież</button>
             <button
               onClick={onDeleteAll}
               disabled={busy || !items?.length}
@@ -66,33 +104,188 @@ export default function CatalogPage() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Szukaj: nazwa, kod, ID Optima, podtyp…"
+            className="min-w-[220px] flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
+          />
+          <select value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className="rounded border border-slate-300 px-2 py-1.5 text-sm">
+            <option value="">— kategoria —</option>
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={sub} onChange={(e) => setSub(e.target.value)} className="rounded border border-slate-300 px-2 py-1.5 text-sm">
+            <option value="">— podtyp —</option>
+            {subtypes.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
         {err && <div className="text-sm text-red-700">Błąd: {err}</div>}
         {!items && !err && <div className="text-sm text-slate-500">Ładuję…</div>}
 
         {items && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {items.map((p) => (
-              <div key={p.optimaId} className="relative rounded-lg border bg-white p-2">
+            {filtered.map((p) => (
+              <div key={p.id} className="relative rounded-lg border bg-white p-2">
                 <button
-                  onClick={() => onDeleteOne(p.optimaId)}
+                  onClick={() => onDeleteOne(p.id, p.optimaId ?? p.manufacturerCode ?? p.name ?? p.id)}
                   disabled={busy}
                   title="Usuń"
                   className="absolute right-1 top-1 z-10 rounded bg-white/90 px-1.5 py-0.5 text-xs text-red-600 shadow hover:bg-red-50 disabled:opacity-50"
                 >
                   Usuń
                 </button>
-                <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
-                  <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" loading="lazy" />
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  <code>{p.optimaId}</code>
-                </div>
-                <div className="line-clamp-2 text-xs font-medium">{p.name}</div>
+                <button onClick={() => setOpenId(p.id)} className="block w-full text-left">
+                  <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
+                    <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" loading="lazy" />
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    <code>{p.optimaId ?? p.manufacturerCode ?? '—'}</code>
+                    {p.subtype && <span className="ml-1 rounded bg-slate-100 px-1">{p.subtype}</span>}
+                  </div>
+                  <div className="line-clamp-2 text-xs font-medium">{p.name}</div>
+                </button>
               </div>
             ))}
           </div>
         )}
       </main>
+
+      {openId && (
+        <ProductModal
+          id={openId}
+          onClose={() => setOpenId(null)}
+          onSaved={() => { setOpenId(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+function ProductModal({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => void }) {
+  const [d, setD] = useState<ProductDetail | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [edit, setEdit] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<ProductPatch>({});
+  const [paramsText, setParamsText] = useState('');
+
+  useEffect(() => {
+    getProduct(id)
+      .then((pd) => {
+        setD(pd);
+        setForm({ name: pd.name, optimaId: pd.optimaId ?? '', category: pd.category, subtype: pd.subtype });
+        setParamsText(JSON.stringify(pd.params ?? {}, null, 2));
+      })
+      .catch((e) => setErr((e as Error).message));
+  }, [id]);
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const patch: ProductPatch = { ...form };
+      try {
+        patch.params = JSON.parse(paramsText || '{}');
+      } catch {
+        throw new Error('Params: niepoprawny JSON');
+      }
+      await updateProduct(id, patch);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
+      <div className="my-8 w-full max-w-2xl rounded-lg bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold">{d?.name ?? 'Produkt'}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+        </div>
+
+        {err && <div className="mb-2 text-sm text-red-700">{err}</div>}
+        {!d && !err && <div className="text-sm text-slate-500">Ładuję…</div>}
+
+        {d && (
+          <div className="space-y-4">
+            <div className="flex gap-2 overflow-x-auto">
+              {d.images.map((im, i) => (
+                <img key={i} src={im.imageUrl} alt="" className="h-32 w-32 flex-none rounded border bg-slate-50 object-contain" />
+              ))}
+            </div>
+
+            {d.catalog && (
+              <div className="text-sm">
+                <a href={`${d.catalog.pdfUrl}#page=${d.catalog.page}`} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">
+                  📄 {d.catalog.name}, str. {(d.params?.printed_page as number) ?? d.catalog.page} ↗
+                </a>
+              </div>
+            )}
+
+            {!edit ? (
+              <>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <Row k="ID Optima" v={d.optimaId ?? '—'} />
+                  <Row k="Źródło" v={d.source ?? '—'} />
+                  <Row k="Kategoria" v={d.category ?? '—'} />
+                  <Row k="Podtyp" v={d.subtype ?? '—'} />
+                  <Row k="Producent" v={d.manufacturer ?? '—'} />
+                  <Row k="Kod" v={d.manufacturerCode ?? '—'} />
+                </dl>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-slate-500">Parametry</div>
+                  <pre className="max-h-48 overflow-auto rounded bg-slate-50 p-2 text-xs">{JSON.stringify(d.params, null, 2)}</pre>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={() => setEdit(true)} className={btn}>Edytuj</button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Field label="Nazwa" value={form.name ?? ''} onChange={(v) => setForm((f) => ({ ...f, name: v }))} />
+                <Field label="ID Optima" value={form.optimaId ?? ''} onChange={(v) => setForm((f) => ({ ...f, optimaId: v }))} />
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Kategoria" value={form.category ?? ''} onChange={(v) => setForm((f) => ({ ...f, category: v }))} />
+                  <Field label="Podtyp" value={form.subtype ?? ''} onChange={(v) => setForm((f) => ({ ...f, subtype: v }))} />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-slate-500">Parametry (JSON)</div>
+                  <textarea value={paramsText} onChange={(e) => setParamsText(e.target.value)} rows={8} className="w-full rounded border border-slate-300 p-2 font-mono text-xs" />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setEdit(false)} disabled={saving} className={btn}>Anuluj</button>
+                  <button onClick={save} disabled={saving} className="rounded bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+                    {saving ? 'Zapisuję…' : 'Zapisz'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <>
+      <dt className="text-slate-500">{k}</dt>
+      <dd className="font-medium">{v}</dd>
+    </>
+  );
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-0.5 block text-xs font-medium text-slate-500">{label}</span>
+      <input value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
+    </label>
   );
 }

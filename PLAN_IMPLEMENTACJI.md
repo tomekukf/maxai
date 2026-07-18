@@ -435,25 +435,26 @@ wyników wyszukiwania (dlaczego dany produkt jest najbardziej podobny) do celów
   odłożony), więc porównanie opiera się na `params` (twarde dane) + cosinus + ocena/uzasadnienie rerankingu.
 - Katalog ~287 pozycji → **filtr po stronie klienta** wystarcza (ścieżka do server-side search później).
 
-**Krok 6.0 — Tożsamość produktu po UUID (prerekwizyt)**
-- `_list` zwraca `id` (UUID) + `source, category, subtype, manufacturerCode`. `DELETE /products/{id}` po UUID
-  (obok istniejącego po `optimaId` — wstecz). Front kluczuje po `id`.
-- ✅ Weryfikacja: katalog z produktami bez `optima_id` (Maxlight) wyświetla się i usuwa poprawnie.
+**Krok 6.0 — Tożsamość produktu po UUID (prerekwizyt)** — ✅ ZROBIONE (wdrożone)
+- `_list` zwraca `id` (UUID) + `source, category, subtype, manufacturerCode`. Route `/products/{optimaId}`
+  (nazwa zmiennej zachowana — rename na `{id}` konfliktuje w API GW) obsługuje teraz GET/PUT/DELETE po UUID;
+  handler czyta `id`/`optimaId` zamiennie. Front kluczuje/usuwa po `id`.
+- ✅ Weryfikacja: lista zwraca `id`; produkty Maxlight (bez `optima_id`) wyświetlają się i usuwają.
 
-**Krok 6.1 — `GET /products/{id}` (szczegóły)**
-- Pełny produkt: wszystkie `params`, `category`, `subtype`, `source`, `manufacturer`, odniesienie do katalogu
-  (nazwa, `catalog_page`, presigned PDF), lista zdjęć (presigned GET) + `attributes` per zdjęcie.
-- ✅ Weryfikacja: klik w produkt → pełne dane i wszystkie zdjęcia.
+**Krok 6.1 — `GET /products/{id}` (szczegóły)** — ✅ ZROBIONE (wdrożone)
+- Pełny produkt: `params`, `category`, `subtype`, `source`, `manufacturer`, odniesienie do katalogu
+  (nazwa, `catalog_page`, presigned PDF), lista zdjęć (presigned) + `attributes` per zdjęcie.
+- ✅ Weryfikacja: TRIAC → 3 zdjęcia + katalog (str. 339); pełne dane.
 
-**Krok 6.2 — `PUT /products/{id}` (edycja)**
+**Krok 6.2 — `PUT /products/{id}` (edycja)** — ✅ ZROBIONE (wdrożone)
 - Aktualizacja metadanych: `name, optimaId, category, subtype, params (JSON), sourceUrl, manufacturer, manufacturerCode`.
-  Nie rusza embeddingu/zdjęć. Walidacja + zachowanie unikatu `(manufacturer, manufacturer_code)`.
-- ✅ Weryfikacja: edycja zapisuje się; zmiana widoczna po odświeżeniu; kolizja kodu obsłużona.
+  Nie rusza embeddingu/zdjęć. Kolizja unikatu `(manufacturer, manufacturer_code)` → 409.
+- ✅ Weryfikacja: edycja `subtype` zapisała się i po przywróceniu wróciła; test przez API.
 
-**Krok 6.3 — `CatalogPage`: szukanie + filtry + podgląd + edycja**
-- Pole szukania (nazwa/kod/kategoria/subtype) — filtr klienta; dropdowny `category`/`subtype`.
-- Klik w kartę → panel/modal: zdjęcia, opis/atrybuty, pełne `params`, odniesienie do katalogu. Tryb edycji (formularz → `PUT`).
-- ✅ Weryfikacja: filtrowanie zawęża listę; podgląd i edycja działają end-to-end.
+**Krok 6.3 — `CatalogPage`: szukanie + filtry + podgląd + edycja** — ✅ ZROBIONE (front)
+- Pole szukania (nazwa/kod/ID Optima/subtype) — filtr klienta; dropdowny `category`/`subtype`.
+- Klik w kartę → modal: zdjęcia, pełne `params`, odniesienie do katalogu; tryb edycji (formularz + params JSON → `PUT`).
+- `tsc --noEmit` czysty. ⏳ Do potwierdzenia klikalnie w aplikacji przez użytkownika.
 
 **Krok 6.4 — `/search`: „wczytaj kolejne"**
 - `topK` sterowany z frontu; przycisk „Wczytaj kolejne N" zwiększa `topK` (i `recallK`) i ponawia zapytanie

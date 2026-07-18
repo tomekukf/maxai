@@ -108,11 +108,49 @@ export async function searchByImage(imageBase64: string, topK = 3): Promise<Sear
 }
 
 export type Product = {
-  optimaId: string;
+  id: string;
+  optimaId: string | null;
   name: string;
   params: Record<string, unknown>;
+  source?: string;
+  category?: string;
+  subtype?: string;
+  manufacturerCode?: string;
   imageUrl: string;
+  imageCount?: number;
 };
+
+export type ProductImage = {
+  imageUrl: string;
+  attributes?: Record<string, unknown> | null;
+  sortOrder: number;
+};
+
+export type ProductDetail = {
+  id: string;
+  optimaId: string | null;
+  name: string;
+  params: Record<string, unknown>;
+  source?: string;
+  category?: string;
+  subtype?: string;
+  manufacturer?: string;
+  manufacturerCode?: string;
+  images: ProductImage[];
+  catalog?: { name: string; page: number; pdfUrl: string };
+};
+
+// Pola edytowalne w panelu (PUT /products/{id}).
+export type ProductPatch = Partial<{
+  name: string;
+  optimaId: string;
+  category: string;
+  subtype: string;
+  manufacturer: string;
+  manufacturerCode: string;
+  sourceUrl: string;
+  params: Record<string, unknown>;
+}>;
 
 export async function listProducts(): Promise<Product[]> {
   const r = await fetch(`${API_URL}/products`, { method: 'GET' });
@@ -121,8 +159,28 @@ export async function listProducts(): Promise<Product[]> {
   return (data.items ?? []) as Product[];
 }
 
-export async function deleteProduct(optimaId: string): Promise<{ deleted: number }> {
-  const r = await fetch(`${API_URL}/products/${encodeURIComponent(optimaId)}`, { method: 'DELETE' });
+export async function getProduct(id: string): Promise<ProductDetail> {
+  const r = await fetch(`${API_URL}/products/${encodeURIComponent(id)}`, { method: 'GET' });
+  if (!r.ok) throw new Error(`product detail: ${r.status}`);
+  const data = await r.json();
+  return data.product as ProductDetail;
+}
+
+export async function updateProduct(id: string, patch: ProductPatch): Promise<{ id: string; updated: boolean }> {
+  const r = await fetch(`${API_URL}/products/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error ?? `update: ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function deleteProduct(id: string): Promise<{ deleted: number }> {
+  const r = await fetch(`${API_URL}/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!r.ok) throw new Error(`delete: ${r.status}`);
   return r.json();
 }
