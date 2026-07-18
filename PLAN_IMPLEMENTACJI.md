@@ -487,30 +487,28 @@ administracji rozwiązaniem + statystyki).
   (react-markdown), nie wpisana na sztywno w komponent.
 - Nawigacja ról uzasadnia wprowadzenie `react-router` (obecnie brak).
 
-**Krok 7.0 — Architektura ról + nawigacja**
-- Rozdział na **Panel handlowca** (domyślny) i **Panel admina**; routing (`react-router`) + layout per obszar.
-  Interim gate admina (hasło z `VITE_*`/konfiguracji) z wyraźną adnotacją: to porządek UX, **nie** zabezpieczenie API.
-- ✅ Weryfikacja: dwa obszary działają; handlowiec nie widzi narzędzi admina; gate admina wymaga hasła (interim).
+**Krok 7.0 — Architektura ról + nawigacja** — ✅ ZROBIONE
+- `App.tsx`: dwa obszary — **Panel handlowca** (domyślny) i **Panel admina** (nawigacja na stanie; `react-router`
+  odłożony jako zbędny na tym etapie). Interim gate admina (`VITE_ADMIN_PASSWORD`; brak → tryb dev) z adnotacją,
+  że to UX, **nie** zabezpieczenie API.
+- ✅ Weryfikacja: przełączanie obszarów działa; handlowiec nie widzi narzędzi admina; gate wymaga hasła (interim).
 
-**Krok 7.1 — Panel handlowca (user)**
-- Skupiony na pracy: **Wyszukiwanie substytutów** (PDF/obraz → kadr → wyniki z ID Optima / odniesieniem do
-  katalogu, „wczytaj kolejne" i „dlaczego podobne" z Fazy 6), **przeglądanie/szukanie katalogu** w trybie
-  read-only (podgląd, kopiuj ID, link do katalogu), **doprecyzowanie** (Faza 3). Brak funkcji destrukcyjnych.
-- (Opc.) „schowek" produktów do oferty dla klienta + historia ostatnich wyszukiwań (lokalnie, `localStorage`).
-- ✅ Weryfikacja: handlowiec wykonuje pełny flow bez dostępu do edycji/usuwania/importu.
+**Krok 7.1 — Panel handlowca (user)** — ✅ ZROBIONE
+- Zakładki: **Wyszukiwanie** (z „wczytaj kolejne"/„dlaczego podobne" z Fazy 6) + **Katalog** w trybie
+  read-only (`CatalogPage admin={false}` — bez usuwania/edycji; podgląd, szukanie, link do katalogu).
+- (Opc. na później) schowek ofertowy + historia — nie zrobione.
+- ✅ Weryfikacja: handlowiec ma pełny flow bez funkcji destrukcyjnych. `tsc`/`vite build` czyste.
 
-**Krok 7.2 — Panel admina (zarządzanie danymi)**
-- Narzędzia: zasilanie pojedyncze (`IngestPage`), import katalogu PDF (UI Fazy 5), zarządzanie katalogami
-  (lista/usuń), edycja/usuwanie produktów (Faza 6), **statystyki** (liczba produktów/katalogów/zdjęć,
-  rozkład `category`/`subtype`, produkty bez embeddingu/opisu).
-- ✅ Weryfikacja: admin zarządza danymi; operacje destrukcyjne dostępne wyłącznie tutaj.
+**Krok 7.2 — Panel admina (zarządzanie danymi)** — 🟡 CZĘŚCIOWO
+- ✅ Zakładki: **Katalog** (`admin` — edycja/usuwanie), **Zasilanie** (`IngestPage`), **Statystyki**
+  (`StatsPage`: produkty/zdjęcia/kategorie/z ID Optima + rozkłady kategoria/podtyp/źródło), **Dokumentacja**.
+- ⏳ Import katalogu PDF z UI (Faza 5.5) i zarządzanie katalogami (lista/usuń) — do zrobienia (import głównie przez 7.5).
 
-**Krok 7.3 — Dokumentacja techniczna administracji (w panelu admina)**
-- Widok renderujący `docs/admin-runbook.md`: architektura i zasoby AWS (RDS+pgvector, S3, Lambda, API GW,
-  Bedrock — modele + ID), procedury (migracje `migrate.mjs`; ekstrakcja/seed katalogu `extract-maxlight.py`
-  + `seed-maxlight.mjs`; deploy `cdk deploy`; czyszczenie/odtworzenie bazy `db-clear.mjs`), koszty/budżet,
-  bezpieczeństwo (SSL, Secrets Manager, presigned S3), gotchas i troubleshooting. Jedno źródło prawdy, wersjonowane.
-- ✅ Weryfikacja: admin widzi aktualny runbook w aplikacji; treść zgodna z repo.
+**Krok 7.3 — Dokumentacja techniczna administracji (w panelu admina)** — ✅ ZROBIONE
+- `docs/admin-runbook.md` (architektura, zasoby AWS, procedury migracji/ekstrakcji/seedu/deployu/czyszczenia,
+  zasada „kolekcje lokalnie", bezpieczeństwo, gotchas, koszty) renderowany w zakładce Dokumentacja
+  (`MarkdownLite`, import `?raw` z repo root — `vite fs.allow: ['..']`). Jedno źródło prawdy.
+- ✅ Weryfikacja: runbook renderuje się w aplikacji (build przechodzi z importem z `docs/`).
 
 **Krok 7.4 — (Bezpieczeństwo) Uwierzytelnianie i autoryzacja API — Cognito**
 - Docelowo: Cognito user pool + role (`admin`/`handlowiec`), authorizer na HTTP API; endpointy

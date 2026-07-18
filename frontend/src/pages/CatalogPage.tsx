@@ -12,7 +12,7 @@ import {
 
 const btn = 'rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50';
 
-export default function CatalogPage() {
+export default function CatalogPage({ admin = false }: { admin?: boolean }) {
   const [items, setItems] = useState<Product[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,13 +94,15 @@ export default function CatalogPage() {
           </div>
           <div className="ml-auto flex gap-2">
             <button onClick={load} disabled={busy} className={btn}>Odśwież</button>
-            <button
-              onClick={onDeleteAll}
-              disabled={busy || !items?.length}
-              className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              Usuń wszystko
-            </button>
+            {admin && (
+              <button
+                onClick={onDeleteAll}
+                disabled={busy || !items?.length}
+                className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                Usuń wszystko
+              </button>
+            )}
           </div>
         </div>
 
@@ -128,14 +130,16 @@ export default function CatalogPage() {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {filtered.map((p) => (
               <div key={p.id} className="relative rounded-lg border bg-white p-2">
-                <button
-                  onClick={() => onDeleteOne(p.id, p.optimaId ?? p.manufacturerCode ?? p.name ?? p.id)}
-                  disabled={busy}
-                  title="Usuń"
-                  className="absolute right-1 top-1 z-10 rounded bg-white/90 px-1.5 py-0.5 text-xs text-red-600 shadow hover:bg-red-50 disabled:opacity-50"
-                >
-                  Usuń
-                </button>
+                {admin && (
+                  <button
+                    onClick={() => onDeleteOne(p.id, p.optimaId ?? p.manufacturerCode ?? p.name ?? p.id)}
+                    disabled={busy}
+                    title="Usuń"
+                    className="absolute right-1 top-1 z-10 rounded bg-white/90 px-1.5 py-0.5 text-xs text-red-600 shadow hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Usuń
+                  </button>
+                )}
                 <button onClick={() => setOpenId(p.id)} className="block w-full text-left">
                   <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
                     <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" loading="lazy" />
@@ -155,6 +159,7 @@ export default function CatalogPage() {
       {openId && (
         <ProductModal
           id={openId}
+          admin={admin}
           onClose={() => setOpenId(null)}
           onSaved={() => { setOpenId(null); load(); }}
         />
@@ -163,7 +168,7 @@ export default function CatalogPage() {
   );
 }
 
-function ProductModal({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => void }) {
+function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: boolean; onClose: () => void; onSaved: () => void }) {
   const [d, setD] = useState<ProductDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [edit, setEdit] = useState(false);
@@ -241,9 +246,11 @@ function ProductModal({ id, onClose, onSaved }: { id: string; onClose: () => voi
                   <div className="mb-1 text-xs font-medium text-slate-500">Parametry</div>
                   <pre className="max-h-48 overflow-auto rounded bg-slate-50 p-2 text-xs">{JSON.stringify(d.params, null, 2)}</pre>
                 </div>
-                <div className="flex justify-end">
-                  <button onClick={() => setEdit(true)} className={btn}>Edytuj</button>
-                </div>
+                {admin && (
+                  <div className="flex justify-end">
+                    <button onClick={() => setEdit(true)} className={btn}>Edytuj</button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="space-y-2">

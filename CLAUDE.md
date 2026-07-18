@@ -65,12 +65,12 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - 🎉 **Faza 6 UKOŃCZONA — Katalog (przegląd/edycja) + wyjaśnialność wyszukiwania (wdrożone).** Tożsamość po UUID,
   `GET/PUT /products/{id}`, `CatalogPage` (szukanie/filtry/podgląd/edycja), `/search` „wczytaj kolejne" + „Dlaczego
   podobne?" (rerankScore, cosinus, per-kandydat `powod`, `queryAttributes`, tabela zgodności cech).
-- 📐 **Faza 7 — Role: panel handlowca + panel admina (zaplanowana).** Rozdział aplikacji: panel handlowca
-  (wyszukiwanie substytutów, katalog read-only, doprecyzowanie) i panel admina (import/edycja/usuwanie danych,
-  statystyki, **dokumentacja techniczna administracji** z `docs/admin-runbook.md` renderowanego w UI). Teraz
-  separacja UX + prosty gate; docelowo **Cognito + authorizer** (twarde zabezpieczenie API, Krok 7.4). Rozważyć
-  `react-router` + `react-markdown`. **Import/eksport kolekcji** (Krok 7.5): admin wgrywa/eksportuje kolekcje
-  przygotowane lokalnie; eksport zawiera embeddingi → re-import bez Bedrock. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
+- 🚧 **Faza 7 — Role: panel handlowca + panel admina (w toku).** ✅ 7.0–7.3: `App.tsx` rozdzielony na panel
+  handlowca (Wyszukiwanie + Katalog read-only) i panel admina za gate'em (`VITE_ADMIN_PASSWORD`) — Katalog
+  (edycja/usuwanie), Zasilanie, Statystyki (`StatsPage`), Dokumentacja (runbook `docs/admin-runbook.md` renderowany
+  przez `MarkdownLite`, `?raw` + `vite fs.allow:['..']`). Nawigacja na stanie (bez react-router). ⏳ Zostaje:
+  **7.5 import/eksport kolekcji** (eksport z embeddingami → re-import bez Bedrock; wymaga `GET /catalogs/{id}/export`
+  + `embedding` w `/products`), **7.4 Cognito** (twarde zabezpieczenie API). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)
