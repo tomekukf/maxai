@@ -24,7 +24,19 @@ BUCKET = os.environ["FILES_BUCKET"]
 URL_TTL = 900  # sekund
 
 
+def _is_admin(event) -> bool:
+    try:
+        claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+    except (KeyError, TypeError):
+        return False
+    g = claims.get("cognito:groups", "")
+    return "admin" in g if isinstance(g, list) else "admin" in str(g)
+
+
 def lambda_handler(event, _context):
+    # Presign używany przez import/zasilanie (admin) → wymaga roli admin.
+    if not _is_admin(event):
+        return _resp(403, {"error": "Brak uprawnień (wymagana rola admin)"})
     try:
         body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:

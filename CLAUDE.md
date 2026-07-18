@@ -72,8 +72,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   ✅ **7.5 import/eksport kolekcji** (wdrożone): `POST/GET /catalogs`, `GET /catalogs/{id}/export` (paczka→S3+presigned,
   omija limit 6 MB), `/products` przyjmuje gotowy `embedding` (import bez Titana); `ImportPage` (folder `webkitdirectory`
   → createCatalog → presign+upload → importProduct). ✅ **7.6 onboarding** (`scripts/prepare-catalog.py` → `PROBE.json` +
-  `CLAUDE_INSTRUCTIONS.md` + próbki; instrukcja end-to-end w `admin-runbook.md`). ⏳ **7.4 Cognito** (twarde zabezpieczenie
-  API) — zostało. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
+  `CLAUDE_INSTRUCTIONS.md` + próbki; instrukcja end-to-end w `admin-runbook.md`). ✅ **7.4 Cognito** (wdrożone):
+  User Pool + grupy admin/handlowiec + `HttpJwtAuthorizer`; chronione operacje admina (mutacje + `POST /catalogs`
+  + presign, wymóg grupy `admin` w Lambdzie), GET/`/search` publiczne; logowanie USER_PASSWORD_AUTH w `App.tsx`
+  (`lib/auth.ts`, token dołączany w `api.ts`). `VITE_COGNITO_CLIENT_ID`/`_REGION`. Zarządzanie userami: `admin-runbook.md`.
+  🎉 **Faza 7 ukończona.** Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)

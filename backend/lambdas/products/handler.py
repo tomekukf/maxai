@@ -436,12 +436,25 @@ def _with_retry(fn):
             return _resp(500, {"error": str(e)[:200]})
 
 
+def _is_admin(event) -> bool:
+    """Grupa 'admin' z claims JWT (authorizer Cognito). Operacje mutujące tylko dla admina."""
+    try:
+        claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+    except (KeyError, TypeError):
+        return False
+    g = claims.get("cognito:groups", "")
+    return "admin" in g if isinstance(g, list) else "admin" in str(g)
+
+
 def lambda_handler(event, _ctx):
     http = event.get("requestContext", {}).get("http", {})
     method = http.get("method", "POST")
     path = event.get("rawPath") or http.get("path", "") or ""
     pp = event.get("pathParameters") or {}
     pid = pp.get("id") or pp.get("optimaId")  # ścieżka używa zmiennej {optimaId}, ale przyjmujemy UUID
+    mutating = method in ("POST", "PUT", "DELETE")
+    if mutating and not _is_admin(event):
+        return _resp(403, {"error": "Brak uprawnień (wymagana rola admin)"})
 
     # --- katalogi ---
     if path.startswith("/catalogs"):

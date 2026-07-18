@@ -512,11 +512,18 @@ administracji rozwiązaniem + statystyki).
   (`MarkdownLite`, import `?raw` z repo root — `vite fs.allow: ['..']`). Jedno źródło prawdy.
 - ✅ Weryfikacja: runbook renderuje się w aplikacji (build przechodzi z importem z `docs/`).
 
-**Krok 7.4 — (Bezpieczeństwo) Uwierzytelnianie i autoryzacja API — Cognito**
-- Docelowo: Cognito user pool + role (`admin`/`handlowiec`), authorizer na HTTP API; endpointy
-  `POST/PUT/DELETE /products`, `/catalogs`, import — tylko `admin`; wyszukiwanie/katalog — zalogowany user.
-  Do czasu wdrożenia interim gate (7.0) jest wyłącznie UX.
-- ✅ Weryfikacja: bez ważnego tokena/roli API odrzuca operacje admina (401/403).
+**Krok 7.4 — (Bezpieczeństwo) Uwierzytelnianie i autoryzacja API — Cognito** — ✅ ZROBIONE (wdrożone)
+- CDK: Cognito User Pool + client publiczny (USER_PASSWORD_AUTH) + grupy `admin`/`handlowiec`; `HttpJwtAuthorizer`
+  na HTTP API. **Chronione (token + grupa `admin`):** `POST/DELETE /products`, `PUT/DELETE /products/{id}`,
+  `POST /catalogs`, `POST /uploads/presign`. GET-y i `/search` publiczne (zgodnie z decyzją „tylko operacje admina").
+- Lambda (`products`, `presign`): sprawdza `cognito:groups` z claims → operacje mutujące tylko dla `admin` (inaczej 403).
+- Front: `lib/auth.ts` (login USER_PASSWORD_AUTH, sesja w `localStorage`, grupa z ID tokena), `App.tsx` — logowanie
+  do panelu admina + `setAuthToken` dołączany do wywołań admina. `VITE_COGNITO_CLIENT_ID`/`_REGION` w `.env`.
+- ✅ Weryfikacja: `POST /catalogs` bez tokena → **401**, z tokenem admina → **200**, `GET /catalogs` → **200**.
+  Zarządzanie użytkownikami: `docs/admin-runbook.md`. (Utworzony testowy `admin`.)
+- ⏳ Do rozważenia: challenge zmiany hasła w UI, ochrona `GET /catalogs/{id}/export`, zawężenie CORS do domeny.
+
+> 🎉 **Faza 7 ukończona** (role handlowiec/admin, statystyki, dokumentacja, import/eksport kolekcji, onboarding, Cognito).
 
 **Krok 7.5 — Import/eksport kolekcji produktów/katalogów (panel admina)** — 🟡 ZROBIONE (backend wdrożony + UI; pełny round-trip do potwierdzenia klikalnie)
 - **Zasada (zablokowana decyzja):** kolekcje **powstają lokalnie** (bez vision na Bedrock). Panel admina

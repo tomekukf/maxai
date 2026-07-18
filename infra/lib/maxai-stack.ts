@@ -5,8 +5,10 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { HttpApi, HttpMethod, CorsHttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as path from 'path';
 
 // Model Bedrock (EU inference profile) do ekstrakcji/NLP.
@@ -107,13 +109,38 @@ export class MaxaiStack extends Stack {
           CorsHttpMethod.DELETE,
           CorsHttpMethod.OPTIONS,
         ],
-        allowHeaders: ['content-type'],
+        allowHeaders: ['content-type', 'authorization'],
       },
     });
+
+    // --- Cognito: uwierzytelnianie (Faza 7.4) ---
+    // Role przez grupy: 'admin' (operacje destrukcyjne/import) i 'handlowiec'. Bez self-signup.
+    const userPool = new cognito.UserPool(this, 'UserPool', {
+      selfSignUpEnabled: false,
+      signInAliases: { username: true, email: true },
+      passwordPolicy: { minLength: 8, requireLowercase: true, requireDigits: true },
+      removalPolicy: RemovalPolicy.DESTROY, // MVP
+    });
+    const userPoolClient = userPool.addClient('WebClient', {
+      authFlows: { userPassword: true, userSrp: true }, // USER_PASSWORD_AUTH (formularz w aplikacji)
+      generateSecret: false, // klient publiczny (SPA)
+    });
+    new cognito.CfnUserPoolGroup(this, 'AdminGroup', { userPoolId: userPool.userPoolId, groupName: 'admin' });
+    new cognito.CfnUserPoolGroup(this, 'SalesGroup', { userPoolId: userPool.userPoolId, groupName: 'handlowiec' });
+
+    // Authorizer JWT (waliduje ID token; grupę 'admin' sprawdza Lambda w claims cognito:groups).
+    const jwtAuth = new HttpJwtAuthorizer(
+      'JwtAuth',
+      `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`,
+      { jwtAudience: [userPoolClient.userPoolClientId] },
+    );
+
+    // Presign (używany przez import/zasilanie = admin) → chroniony.
     httpApi.addRoutes({
       path: '/uploads/presign',
       methods: [HttpMethod.POST],
       integration: new HttpLambdaIntegration('PresignInteg', presignFn),
+      authorizer: jwtAuth,
     });
 
     // --- Lambda: ekstrakcja parametrów (Haiku 4.5 na Bedrock) ---
@@ -180,29 +207,16 @@ export class MaxaiStack extends Stack {
       }),
     );
     const productsInteg = new HttpLambdaIntegration('ProductsInteg', productsFn);
-    httpApi.addRoutes({
-      path: '/products',
-      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.DELETE],
-      integration: productsInteg,
-    });
-    // Uwaga: zachowujemy nazwę zmiennej {optimaId} (rename na {id} powoduje konflikt route'ów
-    // przy deployu). Ścieżka przyjmuje UUID produktu; handler czyta id/optimaId zamiennie.
-    httpApi.addRoutes({
-      path: '/products/{optimaId}',
-      methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
-      integration: productsInteg,
-    });
-    // Katalogi (import/eksport kolekcji) — obsługiwane przez tę samą Lambdę (ma DB/S3/pg8000).
-    httpApi.addRoutes({
-      path: '/catalogs',
-      methods: [HttpMethod.GET, HttpMethod.POST],
-      integration: productsInteg,
-    });
-    httpApi.addRoutes({
-      path: '/catalogs/{id}/export',
-      methods: [HttpMethod.GET],
-      integration: productsInteg,
-    });
+    // GET-y publiczne (wyszukiwanie/katalog handlowca); mutacje chronione (grupa 'admin' w Lambdzie).
+    // Uwaga: zachowujemy nazwę zmiennej {optimaId} (rename na {id} powoduje konflikt route'ów).
+    httpApi.addRoutes({ path: '/products', methods: [HttpMethod.GET], integration: productsInteg });
+    httpApi.addRoutes({ path: '/products/{optimaId}', methods: [HttpMethod.GET], integration: productsInteg });
+    httpApi.addRoutes({ path: '/catalogs', methods: [HttpMethod.GET], integration: productsInteg });
+    httpApi.addRoutes({ path: '/catalogs/{id}/export', methods: [HttpMethod.GET], integration: productsInteg });
+    // Operacje admina (token + grupa 'admin').
+    httpApi.addRoutes({ path: '/products', methods: [HttpMethod.POST, HttpMethod.DELETE], integration: productsInteg, authorizer: jwtAuth });
+    httpApi.addRoutes({ path: '/products/{optimaId}', methods: [HttpMethod.PUT, HttpMethod.DELETE], integration: productsInteg, authorizer: jwtAuth });
+    httpApi.addRoutes({ path: '/catalogs', methods: [HttpMethod.POST], integration: productsInteg, authorizer: jwtAuth });
 
     // --- Lambda: wyszukiwanie substytutów (embedding wycinka → pgvector) ---
     const searchFn = new lambda.Function(this, 'SearchFn', {
@@ -249,6 +263,11 @@ export class MaxaiStack extends Stack {
     new CfnOutput(this, 'DbSecretName', {
       value: db.secret?.secretName ?? 'n/a',
       description: 'Nazwa sekretu w Secrets Manager (login + haslo)',
+    });
+    new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId, description: 'Cognito User Pool ID' });
+    new CfnOutput(this, 'UserPoolClientId', {
+      value: userPoolClient.userPoolClientId,
+      description: 'Cognito App Client ID (VITE_COGNITO_CLIENT_ID)',
     });
   }
 }

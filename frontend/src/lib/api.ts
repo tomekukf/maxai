@@ -5,13 +5,22 @@ if (!API_URL) {
   console.warn('Brak VITE_API_URL — ustaw w frontend/.env.local');
 }
 
+// Token JWT (Cognito) do operacji admina; ustawiany po zalogowaniu.
+let authToken: string | null = null;
+export function setAuthToken(t: string | null) {
+  authToken = t;
+}
+function authHeaders(): Record<string, string> {
+  return authToken ? { authorization: `Bearer ${authToken}` } : {};
+}
+
 export async function presign(
   filename: string,
   prefix: string,
 ): Promise<{ uploadUrl: string; key: string }> {
   const r = await fetch(`${API_URL}/uploads/presign`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ filename, prefix }),
   });
   if (!r.ok) throw new Error(`presign: ${r.status}`);
@@ -71,7 +80,7 @@ export type CatalogMeta = {
 export async function createCatalog(meta: CatalogMeta): Promise<{ id: string }> {
   const r = await fetch(`${API_URL}/catalogs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(meta),
   });
   if (!r.ok) throw new Error(`catalogs: ${r.status}`);
@@ -103,7 +112,7 @@ export async function exportCatalog(id: string): Promise<{ downloadUrl: string; 
 export async function importProduct(body: Record<string, unknown>): Promise<{ id?: string; duplicate?: boolean }> {
   const r = await fetch(`${API_URL}/products`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!r.ok) {
@@ -133,7 +142,7 @@ export async function saveProduct(input: {
 }): Promise<{ id: string; images: number }> {
   const r = await fetch(`${API_URL}/products`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(input),
   });
   if (!r.ok) throw new Error(`products: ${r.status}`);
@@ -244,7 +253,7 @@ export async function getProduct(id: string): Promise<ProductDetail> {
 export async function updateProduct(id: string, patch: ProductPatch): Promise<{ id: string; updated: boolean }> {
   const r = await fetch(`${API_URL}/products/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(patch),
   });
   if (!r.ok) {
@@ -255,13 +264,13 @@ export async function updateProduct(id: string, patch: ProductPatch): Promise<{ 
 }
 
 export async function deleteProduct(id: string): Promise<{ deleted: number }> {
-  const r = await fetch(`${API_URL}/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const r = await fetch(`${API_URL}/products/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
   if (!r.ok) throw new Error(`delete: ${r.status}`);
   return r.json();
 }
 
 export async function deleteAllProducts(): Promise<{ deleted: number }> {
-  const r = await fetch(`${API_URL}/products`, { method: 'DELETE' });
+  const r = await fetch(`${API_URL}/products`, { method: 'DELETE', headers: authHeaders() });
   if (!r.ok) throw new Error(`delete all: ${r.status}`);
   return r.json();
 }

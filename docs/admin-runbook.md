@@ -69,11 +69,22 @@ Pełny przepływ (0 wywołań Bedrock vision):
 2. Import kolekcji: eksport pakietu (panel admina) → import (embeddingi z pakietu → bez Bedrock),
    lub `seed-maxlight.mjs` (embeddingi z Titana — jednorazowy koszt).
 
-## Bezpieczeństwo
+## Bezpieczeństwo i logowanie (Cognito, Faza 7.4)
 
-- RDS: SSL + hasło (Secrets Manager). SG 5432 otwarty (MVP) — TODO: zawęzić / RDS prywatny.
-- S3: presigned URL (path-style), bucket prywatny.
-- API: obecnie **otwarte** — rozdział ról to na razie UX. Docelowo Cognito + authorizer (Krok 7.4).
+- **Autoryzacja API:** operacje admina (`POST/PUT/DELETE /products`, `POST /catalogs`, `/uploads/presign`)
+  wymagają tokena JWT (Cognito) + grupy **`admin`**. GET-y i `/search` są publiczne (praca handlowca bez logowania).
+- **Logowanie:** formularz w panelu admina (USER_PASSWORD_AUTH). Front potrzebuje `VITE_COGNITO_CLIENT_ID`
+  (output `UserPoolClientId`) i `VITE_COGNITO_REGION` w `frontend/.env.local`.
+- **Zarządzanie użytkownikami** (`UP` = output `UserPoolId`):
+  - Utwórz: `aws cognito-idp admin-create-user --user-pool-id <UP> --username <login> --message-action SUPPRESS`
+  - Stałe hasło: `aws cognito-idp admin-set-user-password --user-pool-id <UP> --username <login> --password '<hasło>' --permanent`
+  - Rola: `aws cognito-idp admin-add-user-to-group --user-pool-id <UP> --username <login> --group-name admin|handlowiec`
+  - (Bez `--permanent` konto wymaga zmiany hasła — logowanie w aplikacji tego nie obsługuje; ustaw stałe hasło.)
+- **RDS:** SSL + hasło (Secrets Manager). SG 5432 otwarty (MVP) — TODO: zawęzić / RDS prywatny.
+- **S3:** presigned URL (path-style), bucket prywatny.
+- **Uwaga (skrypty):** `seed-maxlight.mjs` woła `POST /products` (chroniony) → wymaga teraz tokena admina;
+  podstawowa ścieżka to import przez panel admina. `migrate.mjs`/`db-clear.mjs`/`db-count.mjs` łączą się z DB
+  bezpośrednio (bez API) — działają bez zmian.
 
 ## Gotchas
 
