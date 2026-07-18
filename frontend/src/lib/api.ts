@@ -89,6 +89,10 @@ export type SearchResult = {
   reranked?: boolean;
   source?: string; // 'optima' | 'catalog'
   category?: string;
+  // Wyjaśnialność (analityka):
+  rerankScore?: number | null; // ocena rerankingu 0-100 (null = fallback wizualny)
+  reason?: string | null; // krótkie uzasadnienie modelu
+  attributes?: Record<string, unknown> | null; // opis wizualny produktu (jeśli jest)
   // Odniesienie do katalogu producenta (gdy source === 'catalog'):
   manufacturer?: string;
   catalogName?: string;
@@ -96,7 +100,13 @@ export type SearchResult = {
   catalogUrl?: string; // presigned link do PDF w S3
 };
 
-export async function searchByImage(imageBase64: string, topK = 3): Promise<SearchResult[]> {
+export type SearchResponse = {
+  results: SearchResult[];
+  queryCategory?: string | null;
+  queryAttributes?: Record<string, unknown> | null; // co system „zrozumiał" z wycinka
+};
+
+export async function searchByImage(imageBase64: string, topK = 3): Promise<SearchResponse> {
   const r = await fetch(`${API_URL}/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -104,7 +114,11 @@ export async function searchByImage(imageBase64: string, topK = 3): Promise<Sear
   });
   if (!r.ok) throw new Error(`search: ${r.status}`);
   const data = await r.json();
-  return (data.results ?? []) as SearchResult[];
+  return {
+    results: (data.results ?? []) as SearchResult[],
+    queryCategory: data.queryCategory ?? null,
+    queryAttributes: data.queryAttributes ?? null,
+  };
 }
 
 export type Product = {

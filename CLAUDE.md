@@ -62,11 +62,9 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
     - 5.8 **seed Maxlight zrobiony: 243 produkty, 750 zdjęć z embeddingiem w bazie**, katalog + PDF w S3 (`seed-maxlight.mjs`).
     - Frontend: `ResultCard` pokazuje odniesienie do katalogu (link do PDF, strona). Baza po BRW → teraz **243 produkty Maxlight**.
   - ⏸️ ODŁOŻONE: `/catalogs` CRUD + `/catalog/analyze-page` + UI importu z przeglądarki + miękka flaga duplikatów cosine (Krok 5.2/5.5), lista/usuwanie katalogów w UI (5.6).
-- 📐 **Faza 6 — Katalog (przegląd/edycja) + wyjaśnialność wyszukiwania (zaplanowana).** Zadania: tożsamość po UUID
-  (prerekwizyt — `optima_id` bywa NULL dla katalogu), `GET /products/{id}` (szczegóły), `PUT /products/{id}`
-  (edycja metadanych), `CatalogPage` z szukaniem/filtrami/podglądem/edycją, `/search` „wczytaj kolejne" (sterowany
-  `topK`), oraz **wyjaśnialność** wyniku (per-kandydat `powod` z rerankingu + `queryAttributes` + cosinus/ocena —
-  do celów analitycznych). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 6.
+- 🎉 **Faza 6 UKOŃCZONA — Katalog (przegląd/edycja) + wyjaśnialność wyszukiwania (wdrożone).** Tożsamość po UUID,
+  `GET/PUT /products/{id}`, `CatalogPage` (szukanie/filtry/podgląd/edycja), `/search` „wczytaj kolejne" + „Dlaczego
+  podobne?" (rerankScore, cosinus, per-kandydat `powod`, `queryAttributes`, tabela zgodności cech).
 - 📐 **Faza 7 — Role: panel handlowca + panel admina (zaplanowana).** Rozdział aplikacji: panel handlowca
   (wyszukiwanie substytutów, katalog read-only, doprecyzowanie) i panel admina (import/edycja/usuwanie danych,
   statystyki, **dokumentacja techniczna administracji** z `docs/admin-runbook.md` renderowanego w UI). Teraz

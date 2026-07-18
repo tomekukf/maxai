@@ -46,12 +46,15 @@ export default function SearchPage() {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
   const [results, setResults] = useState<SearchResult[] | null>(null);
+  const [queryAttrs, setQueryAttrs] = useState<Record<string, unknown> | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const hiddenRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const lastB64 = useRef<string | null>(null);
 
   function resetForNewImage() {
     setItems([]);
@@ -59,6 +62,8 @@ export default function SearchPage() {
     setCrop(undefined);
     setCompletedCrop(null);
     setResults(null);
+    setQueryAttrs(null);
+    lastB64.current = null;
     setMsg(null);
   }
 
@@ -144,17 +149,28 @@ export default function SearchPage() {
       setMsg('Zaznaczenie za małe.');
       return;
     }
-    setBusy(true);
+    lastB64.current = b64;
+    await runSearch(b64, 3, false);
+  }
+
+  async function runSearch(b64: string, k: number, more: boolean) {
+    (more ? setLoadingMore : setBusy)(true);
     setMsg(null);
     try {
-      const res = await searchByImage(b64);
-      setResults(res);
-      if (!res.length) setMsg('Brak dobrego dopasowania w bazie (nic wystarczająco podobnego).');
+      const res = await searchByImage(b64, k);
+      setResults(res.results);
+      setQueryAttrs(res.queryAttributes ?? null);
+      if (!res.results.length) setMsg('Brak dobrego dopasowania w bazie (nic wystarczająco podobnego).');
     } catch (e) {
       setMsg(`Błąd wyszukiwania: ${(e as Error).message}`);
     } finally {
-      setBusy(false);
+      (more ? setLoadingMore : setBusy)(false);
     }
+  }
+
+  async function loadMore() {
+    if (!lastB64.current || !results) return;
+    await runSearch(lastB64.current, results.length + 3, true);
   }
 
   return (
@@ -276,8 +292,13 @@ export default function SearchPage() {
             <h3 className="font-medium">Propozycje ({results.length})</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {results.map((r, i) => (
-                <ResultCard key={i} r={r} rank={i + 1} />
+                <ResultCard key={i} r={r} rank={i + 1} queryAttrs={queryAttrs} />
               ))}
+            </div>
+            <div className="pt-1">
+              <button onClick={loadMore} disabled={loadingMore} className={navBtn}>
+                {loadingMore ? 'Wczytuję…' : 'Wczytaj kolejne'}
+              </button>
             </div>
           </div>
         )}
@@ -286,8 +307,17 @@ export default function SearchPage() {
   );
 }
 
-function ResultCard({ r, rank }: { r: SearchResult; rank: number }) {
+function ResultCard({
+  r,
+  rank,
+  queryAttrs,
+}: {
+  r: SearchResult;
+  rank: number;
+  queryAttrs: Record<string, unknown> | null;
+}) {
   const [copied, setCopied] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
   return (
     <div className="rounded-lg border bg-white p-3">
       <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
@@ -343,6 +373,75 @@ function ResultCard({ r, rank }: { r: SearchResult; rank: number }) {
           )}
         </div>
       )}
+
+      <button
+        onClick={() => setShowWhy((s) => !s)}
+        className="mt-2 text-xs text-blue-700 hover:underline"
+      >
+        {showWhy ? 'Ukryj' : 'Dlaczego podobne?'}
+      </button>
+      {showWhy && <WhyPanel r={r} queryAttrs={queryAttrs} />}
+    </div>
+  );
+}
+
+function pick(o: Record<string, unknown> | null | undefined, ...keys: string[]): string | null {
+  if (!o) return null;
+  for (const k of keys) {
+    const v = o[k];
+    if (v != null && v !== '') return Array.isArray(v) ? v.join(', ') : String(v);
+  }
+  return null;
+}
+
+function WhyPanel({ r, queryAttrs }: { r: SearchResult; queryAttrs: Record<string, unknown> | null }) {
+  const cand = { ...(r.params ?? {}), ...(r.attributes ?? {}) } as Record<string, unknown>;
+  const rows: { label: string; q: string | null; c: string | null }[] = [
+    { label: 'Kategoria', q: pick(queryAttrs, 'kategoria'), c: r.category ?? null },
+    { label: 'Podtyp', q: pick(queryAttrs, 'subtype'), c: pick(cand, 'subtype') },
+    { label: 'Materiał', q: pick(queryAttrs, 'material'), c: pick(cand, 'material', 'finish') },
+    { label: 'Kolor', q: pick(queryAttrs, 'kolor_dominujacy'), c: pick(cand, 'kolor_dominujacy', 'finish') },
+    { label: 'Styl', q: pick(queryAttrs, 'styl'), c: pick(cand, 'styl') },
+  ];
+  const same = (a: string | null, b: string | null) =>
+    !!a && !!b && (a.toLowerCase().includes(b.toLowerCase()) || b.toLowerCase().includes(a.toLowerCase()));
+  return (
+    <div className="mt-2 space-y-1 rounded bg-slate-50 p-2 text-xs">
+      <div className="flex gap-3">
+        <span>
+          Dopasowanie (rerank):{' '}
+          <b>{r.rerankScore != null ? `${r.rerankScore}%` : '—'}</b>
+        </span>
+        <span>
+          Wizualne (cosinus):{' '}
+          <b>{r.visualSimilarity != null ? `${(r.visualSimilarity * 100).toFixed(0)}%` : '—'}</b>
+        </span>
+      </div>
+      {r.reason && <div className="italic text-slate-600">„{r.reason}"</div>}
+      <table className="w-full">
+        <thead>
+          <tr className="text-slate-400">
+            <th className="text-left font-normal">cecha</th>
+            <th className="text-left font-normal">zapytanie</th>
+            <th className="text-left font-normal">kandydat</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows
+            .filter((x) => x.q || x.c)
+            .map((x) => (
+              <tr key={x.label} className={same(x.q, x.c) ? 'text-green-700' : ''}>
+                <td className="pr-2 text-slate-500">{x.label}</td>
+                <td className="pr-2">{x.q ?? '—'}</td>
+                <td>{x.c ?? '—'}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      <div className="text-[10px] text-slate-400">
+        Zielony = zgodność zapytania i kandydata. Dla katalogów bez opisu wizualnego część cech pochodzi z
+        parametrów technicznych (materiał/wykończenie).
+      </div>
     </div>
   );
 }

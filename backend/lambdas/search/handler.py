@@ -175,7 +175,7 @@ def _rerank(query_bytes, cands, query_attrs=None):
     Zwraca listę indeksów (best→worst) pasujących kandydatów."""
     if not RERANK_MODEL_ID or len(cands) <= 1:
         print(f"[rerank] pomijam (model={RERANK_MODEL_ID}, cands={len(cands)})")
-        return list(range(len(cands))), {}
+        return list(range(len(cands))), {}, {}
     try:
         q_attrs = json.dumps(query_attrs or {}, ensure_ascii=False)[:500]
         content = [
@@ -201,8 +201,10 @@ def _rerank(query_bytes, cands, query_attrs=None):
                     "Nie przeceniaj samej wielkości (2- vs 3-osobowa) ani tła renderu. "
                     "POMIŃ kandydatów będących zupełnie innym typem mebla lub wyraźnie niepodobnych "
                     "kolorem i materiałem (nie umieszczaj ich w wynikach). "
+                    "Dla każdego kandydata podaj też 'powod' — krótkie (do ~12 słów) uzasadnienie oceny "
+                    "(co pasuje / co odróżnia: kolor, materiał, kształt, typ). "
                     'Zwróć WYŁĄCZNIE JSON posortowany od najlepszego: '
-                    '{"wyniki":[{"i":<indeks>,"dopasowanie":<0-100>}], "uzasadnienie":"1 zdanie"}. '
+                    '{"wyniki":[{"i":<indeks>,"dopasowanie":<0-100>,"powod":"..."}], "uzasadnienie":"1 zdanie"}. '
                     "Bez markdown."
                 )
             }
@@ -220,7 +222,7 @@ def _rerank(query_bytes, cands, query_attrs=None):
             print(f"[rerank] uzasadnienie: {data['uzasadnienie']}")
         wyniki = data.get("wyniki") if isinstance(data, dict) else None
         if isinstance(wyniki, list):
-            order, scores = [], {}
+            order, scores, reasons = [], {}, {}
             for w in wyniki:
                 if not isinstance(w, dict):
                     continue
@@ -235,13 +237,15 @@ def _rerank(query_bytes, cands, query_attrs=None):
                     scores[i] = max(0, min(100, int(round(float(w.get("dopasowanie"))))))
                 except (TypeError, ValueError):
                     scores[i] = None
+                if w.get("powod"):
+                    reasons[i] = str(w.get("powod"))[:200]
             print(f"[rerank] ranking={order}, oceny={scores}")
             if order:
-                return order, scores
+                return order, scores, reasons
         print("[rerank] brak poprawnych wynikow -> fallback wizualny")
     except Exception as e:  # noqa: BLE001
         print(f"[rerank] BLAD: {e}")
-    return list(range(len(cands))), {}
+    return list(range(len(cands))), {}, {}
 
 
 def lambda_handler(event, _ctx):
@@ -318,7 +322,7 @@ def lambda_handler(event, _ctx):
     ]
 
     # Rerank Sonnet 4.5 na zdjęciach i atrybutach (kandydaci już w tej samej kategorii).
-    order, scores = _rerank(image_bytes, cands, query_attrs)
+    order, scores, reasons = _rerank(image_bytes, cands, query_attrs)
 
     results = []
     for idx in order[:top_k]:
@@ -336,6 +340,10 @@ def lambda_handler(event, _ctx):
             "reranked": score is not None,
             "source": c["source"],
             "category": c["category"],
+            # Wyjaśnialność (analityka): ocena rerankingu + powód + atrybuty kandydata.
+            "rerankScore": score,            # 0-100 lub null (fallback wizualny)
+            "reason": reasons.get(idx),       # krótkie uzasadnienie modelu
+            "attributes": c["attributes"],    # opis wizualny produktu (jeśli jest)
         }
         # Odniesienie do źródła: produkt z katalogu → link do PDF w S3 otwierany na właściwej stronie.
         if c["source"] == "catalog" and c["catalog_pdf"]:
@@ -344,7 +352,8 @@ def lambda_handler(event, _ctx):
             item["catalogPage"] = c["catalog_page"]
             item["catalogUrl"] = _presign_get(c["catalog_pdf"])
         results.append(item)
-    return _resp(200, {"results": results, "queryCategory": cat})
+    # queryAttributes: co system „zrozumiał" z wycinka (do panelu „dlaczego podobne").
+    return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs})
 
 
 def _resp(status, data):

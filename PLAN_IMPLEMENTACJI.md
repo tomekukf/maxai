@@ -456,18 +456,20 @@ wyników wyszukiwania (dlaczego dany produkt jest najbardziej podobny) do celów
 - Klik w kartę → modal: zdjęcia, pełne `params`, odniesienie do katalogu; tryb edycji (formularz + params JSON → `PUT`).
 - `tsc --noEmit` czysty. ⏳ Do potwierdzenia klikalnie w aplikacji przez użytkownika.
 
-**Krok 6.4 — `/search`: „wczytaj kolejne"**
-- `topK` sterowany z frontu; przycisk „Wczytaj kolejne N" zwiększa `topK` (i `recallK`) i ponawia zapytanie
-  (wycinek trzymany w pamięci — bez ponownego kadrowania). Koszt: dodatkowy embedding + rerank przy dociąganiu.
-- ✅ Weryfikacja: po wyszukaniu można dociągnąć kolejne propozycje (np. 3 → 6 → 9).
+**Krok 6.4 — `/search`: „wczytaj kolejne"** — ✅ ZROBIONE (wdrożone)
+- `topK` sterowany z frontu; przycisk „Wczytaj kolejne" ponawia zapytanie z większym `topK` (wycinek w `useRef`,
+  bez ponownego kadrowania); `recall_k` rośnie z `topK` (więcej kandydatów do rerankingu).
+- ✅ Weryfikacja: po wyszukaniu można dociągnąć kolejne propozycje.
 
-**Krok 6.5 — `/search`: wyjaśnialność dopasowania (analityka)**
-- Backend: rerank zwraca per-kandydat krótki `powod`; odpowiedź zawiera `queryAttributes`
-  (kategoria/kolor/materiał/styl wykryte na wycinku) oraz per-wynik: `visualSimilarity` (cosinus),
-  `rerankScore` (0-100), `reason`, `attributes`/`params` kandydata.
-- Front: przy wyniku przycisk „Dlaczego podobne?" → panel: cosinus %, ocena rerank %, zgodne cechy
-  (kategoria/subtype/materiał/finish: zapytanie vs kandydat), zdanie uzasadnienia modelu.
-- ✅ Weryfikacja: klik pokazuje spójne metryki i uzasadnienie zgodne z kolejnością wyników.
+**Krok 6.5 — `/search`: wyjaśnialność dopasowania (analityka)** — ✅ ZROBIONE (wdrożone)
+- Backend: rerank zwraca per-kandydat `powod`; odpowiedź zawiera `queryAttributes` oraz per-wynik
+  `visualSimilarity` (cosinus), `rerankScore` (0-100), `reason`, `attributes` kandydata.
+- Front: przycisk „Dlaczego podobne?" → panel: ocena rerank %, cosinus %, uzasadnienie modelu + tabela
+  zgodności cech (kategoria/subtype/materiał/kolor/styl; zielony = zgodność).
+- ✅ Weryfikacja: EMPIRE → #1 rerank 95 / cos 100% z powodem „Identyczna kompozycja…"; odrzucone z powodem
+  różnicy formy. `tsc` czysty.
+
+> 🎉 **Faza 6 ukończona** (katalog: przegląd/edycja + wyszukiwanie: wczytaj kolejne + wyjaśnialność).
 
 ### Faza 7 — Role: panel handlowca (user) i panel admina
 
