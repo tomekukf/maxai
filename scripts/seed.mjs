@@ -35,8 +35,34 @@ async function fetchBestImage(originalUrl) {
 }
 
 const all = JSON.parse(readFileSync('rawdata/brw-products.json', 'utf8'));
-const products = all.slice(0, LIMIT);
-console.log(`Ładuję ${products.length} z ${all.length} produktów...`);
+
+// Wybór: CODES=718047,56327 (konkretne) + RANDOM=4 (losowe dodatkowe); inaczej LIMIT (od początku).
+const CODES = (process.env.CODES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const RANDOM = Number(process.env.RANDOM ?? 0);
+
+let products;
+if (CODES.length || RANDOM) {
+  const picked = [];
+  const seen = new Set();
+  for (const code of CODES) {
+    const p = all.find((x) => x.code === code);
+    if (p && !seen.has(code)) {
+      picked.push(p);
+      seen.add(code);
+    } else if (!p) {
+      console.log(`(uwaga) brak kodu ${code} w danych`);
+    }
+  }
+  const pool = all.filter((x) => !seen.has(x.code));
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  products = picked.concat(pool.slice(0, RANDOM));
+} else {
+  products = all.slice(0, LIMIT);
+}
+console.log(`Ładuję ${products.length} produktów (z ${all.length})...`);
 
 let ok = 0;
 for (const [i, p] of products.entries()) {

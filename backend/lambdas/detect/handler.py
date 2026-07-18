@@ -25,6 +25,18 @@ SYSTEM = (
 )
 
 
+def _img_format(b: bytes) -> str:
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if b[:2] == b"\xff\xd8":
+        return "jpeg"
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+        return "webp"
+    if b[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    return "jpeg"
+
+
 def lambda_handler(event, _ctx):
     try:
         body = json.loads(event.get("body") or "{}")
@@ -48,7 +60,7 @@ def lambda_handler(event, _ctx):
             {
                 "role": "user",
                 "content": [
-                    {"image": {"format": "jpeg", "source": {"bytes": image_bytes}}},
+                    {"image": {"format": _img_format(image_bytes), "source": {"bytes": image_bytes}}},
                     {"text": "Wypisz meble/produkty z tego obrazu jako JSON."},
                 ],
             }

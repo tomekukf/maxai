@@ -16,47 +16,61 @@ porównywalne i stanowią drugi (obok embeddingu wizualnego) „punkt zaczepieni
 3. Skupiaj się na **cechach różnicujących** wygląd: bryła, kształt, proporcje, detale.
    To one decydują o „podobny / niepodobny".
 4. Zwracaj **wyłącznie poprawny JSON** wg schematu poniżej (bez markdown, bez komentarzy).
-5. Schemat jest **ogólny dla mebli i produktów wnętrzarskich** (sofy, fotele, stoły, lampy…).
-   Pola nieadekwatne do danego typu → `null`.
+5. Schemat jest **adaptacyjny per kategoria** (meble, oświetlenie, płytki, dywany…).
+   **Rdzeń wspólny** wypełniamy zawsze; **`kategoria` i `subtype` są obowiązkowe** (to one budują
+   twardą bramkę i sygnał różnicujący w wyszukiwaniu). Cechy specyficzne dla danej kategorii idą do
+   obiektu `atrybuty_kategorii` (klucze zależne od kategorii). Pola nieadekwatne → `null`.
+
+### Kategorie (kanoniczne slugi) i podtypy
+- **meble tapicerowane:** `sofa, naroznik, fotel` → subtype np. `3-osobowa`, `rozkladana`, `z_szezlongiem`.
+- **inne meble:** `krzeslo, stol, stolik, lozko, szafka, komoda, regal` → subtype np. `rozkladany`, `barowe`.
+- **oswietlenie** → subtype: `wiszaca, kinkiet, plafon, stolowa, podlogowa, reflektor_szynowy, downlight, zyrandol, listwa_liniowa, system_magnetyczny`.
+- **plytki, dywan, dekoracja, inne** → subtype wg sensu (np. płytki: `scienne/podlogowe`, format).
 
 ## Schemat JSON
 
 ```json
 {
-  "typ": "string|null",                // sofa, narożnik, fotel, krzesło, stół, lampa, komoda, regał...
-  "podtyp": "string|null",             // np. '3-osobowa rozkładana', 'lampa wisząca', 'stół rozkładany'
-  "ksztalt_ogolny": "string|null",     // bryła: prostokątna/kompaktowa/nisko osadzona/smukła/masywna
-  "sylwetka": "string|null",           // proporcje: wys. oparcia, głębokość siedziska, lekkość/masywność
-  "oparcie": "string|null",            // proste/pikowane/z luźnymi poduchami/wysokie/niskie/brak
-  "podlokietniki": "string|null",      // brak/szerokie/wąskie/proste/zaokrąglone/drewniane/tapicerowane
-  "nogi_podstawa": "string|null",      // drewniane/metalowe/kryte/wysokie/niskie/skośne/płozy + kolor
-  "poduszki": "string|null",           // liczba, kształt, pikowanie
-  "material": "string|null",           // welur/sztruks/tkanina/skóra/ekoskóra/plecionka/drewno/metal/szkło
-  "kolor_dominujacy": "string|null",   // np. 'szary', 'butelkowa zieleń', 'beż'
-  "kolory_dodatkowe": ["string"],      // akcenty, kontrastowe elementy
-  "wzor_faktura": "string|null",       // gładki/prążkowany/pikowany/melanż/połysk/mat
-  "styl": "string|null",               // nowoczesny/skandynawski/klasyczny/glamour/loft/industrialny/boho
-  "cechy": ["string"],                 // funkcja spania, pojemnik, regulowane zagłówki, ściągane pokrowce...
-  "wymiary_cm": {                      // tylko jeśli widoczne/podane na obrazie, inaczej null
-    "szerokosc": "number|null",
-    "glebokosc": "number|null",
-    "wysokosc": "number|null"
+  "kategoria": "string",               // OBOWIĄZKOWE, kanoniczny slug (patrz lista wyżej)
+  "subtype": "string|null",            // OBOWIĄZKOWE gdy możliwe do ustalenia; generyczny podtyp w obrębie kategorii
+  "typ": "string|null",                // czytelna nazwa typu (np. 'lampa wisząca', 'sofa 3-osobowa')
+  "ksztalt_ogolny": "string|null",     // bryła: kula/dysk/walec/prostokątna/smukła/masywna...
+  "material": "string|null",           // dominujący materiał: metal/szkło/trawertyn/alabaster/tkanina/skóra/drewno...
+  "kolor_dominujacy": "string|null",   // np. 'czarny', 'złoty', 'biały', 'beż'
+  "kolory_dodatkowe": ["string"],      // akcenty, kontrastowe wykończenia
+  "wzor_faktura": "string|null",       // gładki/prążkowany/marmurowy/pikowany/połysk/mat
+  "styl": "string|null",               // nowoczesny/glamour/industrialny/skandynawski/klasyczny/boho...
+  "cechy": ["string"],                 // cechy różnicujące (funkcje, detale)
+  "wymiary_cm": {                      // tylko jeśli widoczne/podane, inaczej null
+    "szerokosc": "number|null", "glebokosc": "number|null", "wysokosc": "number|null", "srednica": "number|null"
   },
+  "atrybuty_kategorii": { },           // cechy specyficzne dla kategorii (klucze zależne — patrz niżej)
   "opis_swobodny": "string"            // 1-2 zdania naturalnego opisu wyglądu (do rerankingu/tekstu)
 }
 ```
 
+**`atrybuty_kategorii` — przykładowe klucze per kategoria:**
+- **oswietlenie:** `typ_montazu`, `klosz` (kształt+materiał), `zrodlo_swiatla` (np. 'G9', 'LED'), `liczba_punktow`, `barwa_swiatla`, `regulacja`.
+- **meble tapicerowane:** `oparcie`, `podlokietniki`, `nogi_podstawa`, `poduszki`, `sylwetka`.
+- **stol/krzeslo:** `blat`/`siedzisko`, `nogi_podstawa`, `regulacja`.
+- **plytki:** `format`, `powierzchnia` (mat/połysk/struktura), `imitacja` (np. marmur/beton/drewno).
+
 ## Prompt systemowy (do skopiowania do Lambdy)
 
 ```
-Jesteś ekspertem od opisu wizualnego mebli i produktów wnętrzarskich. Na podstawie zdjęcia
-opisz produkt WYŁĄCZNIE tym, co widać. Zwróć wyłącznie poprawny JSON wg schematu:
-{typ, podtyp, ksztalt_ogolny, sylwetka, oparcie, podlokietniki, nogi_podstawa, poduszki,
-material, kolor_dominujacy, kolory_dodatkowe[], wzor_faktura, styl, cechy[],
-wymiary_cm{szerokosc,glebokosc,wysokosc}, opis_swobodny}.
-Po polsku, zwięźle i konkretnie, skupiając się na cechach różnicujących wygląd (bryła, kształt,
-proporcje, detale). Czego nie widać → null (lub [] dla list; wymiary tylko jeśli widoczne).
-Bez markdown, bez komentarzy — sam JSON.
+Jesteś ekspertem od opisu wizualnego mebli i produktów wnętrzarskich (meble, oświetlenie, płytki,
+dywany…). Na podstawie zdjęcia opisz produkt WYŁĄCZNIE tym, co widać. NAJPIERW ustal `kategoria`
+(kanoniczny slug: sofa, naroznik, fotel, krzeslo, stol, stolik, lozko, szafka, komoda, regal,
+oswietlenie, plytki, dywan, dekoracja, inne) oraz `subtype` (generyczny podtyp w obrębie kategorii,
+np. dla oświetlenia: wiszaca/kinkiet/plafon/stolowa/podlogowa/reflektor_szynowy/downlight/zyrandol).
+Zwróć wyłącznie poprawny JSON wg schematu:
+{kategoria, subtype, typ, ksztalt_ogolny, material, kolor_dominujacy, kolory_dodatkowe[],
+wzor_faktura, styl, cechy[], wymiary_cm{szerokosc,glebokosc,wysokosc,srednica},
+atrybuty_kategorii{...}, opis_swobodny}.
+`atrybuty_kategorii` dobierz do kategorii (oświetlenie: typ_montazu, klosz, zrodlo_swiatla,
+liczba_punktow, barwa_swiatla; meble tapicerowane: oparcie, podlokietniki, nogi_podstawa, poduszki).
+Po polsku, zwięźle i konkretnie, skupiając się na cechach różnicujących wygląd. Czego nie widać →
+null (lub [] dla list; wymiary tylko jeśli widoczne). Bez markdown, bez komentarzy — sam JSON.
 ```
 
 ## Jak używamy tego w dopasowaniu (Faza B)

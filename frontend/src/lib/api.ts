@@ -80,11 +80,20 @@ export async function saveProduct(input: {
 }
 
 export type SearchResult = {
-  optimaId: string;
+  optimaId: string | null;
   name: string;
   params: Record<string, unknown>;
   imageUrl: string;
-  similarity: number;
+  similarity: number; // ocena dopasowania (rerank 0-1) lub cosinus Titana (fallback)
+  visualSimilarity?: number; // surowy cosinus Titana
+  reranked?: boolean;
+  source?: string; // 'optima' | 'catalog'
+  category?: string;
+  // Odniesienie do katalogu producenta (gdy source === 'catalog'):
+  manufacturer?: string;
+  catalogName?: string;
+  catalogPage?: number; // strona PDF (1-based) do #page=N
+  catalogUrl?: string; // presigned link do PDF w S3
 };
 
 export async function searchByImage(imageBase64: string, topK = 3): Promise<SearchResult[]> {

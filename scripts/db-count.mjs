@@ -28,7 +28,8 @@ await c.connect();
 const r = await c.query(
   'SELECT (SELECT count(*) FROM products)::int AS produkty, ' +
     '(SELECT count(*) FROM product_images)::int AS zdjecia, ' +
-    '(SELECT count(embedding) FROM product_images)::int AS z_embeddingiem',
+    '(SELECT count(embedding) FROM product_images)::int AS z_embeddingiem, ' +
+    '(SELECT count(attributes) FROM product_images)::int AS z_opisem',
 );
 console.log(r.rows[0]);
 await c.end();

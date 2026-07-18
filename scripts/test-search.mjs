@@ -21,7 +21,8 @@ const inBase = IDX < 25;
 console.log(`Zapytanie: [${IDX}] ${p.name}`);
 console.log(inBase ? '(sofa JEST w bazie — test dokładny, oczekuj jej na #1)' : '(sofa SPOZA bazy — test substytutów, oczekuj podobnych)');
 
-const bytes = Buffer.from(await (await fetch(p.imageUrl)).arrayBuffer());
+const imgUrl = p.images?.[0] ?? p.imageUrl;
+const bytes = Buffer.from(await (await fetch(imgUrl)).arrayBuffer());
 const b64 = bytes.toString('base64');
 
 const r = await fetch(`${API}/search`, {

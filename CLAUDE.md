@@ -28,10 +28,52 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ Krok 1.3 — `/extract` (Haiku 4.5 via Bedrock converse → JSON parametrów). Test: `scripts/test-extract.mjs`.
 - ✅ Krok 1.4 — `/products` (zdjęcie→Titan 1024→atomowy INSERT). Sterownik pg8000 vendorowany. Testy: `scripts/test-products.mjs`, `scripts/db-count.mjs`.
 - ✅ Krok 1.5 — panel `IngestPage` (React 18 + Vite 5 + TS + Tailwind 3 w `frontend/`). Konwersja obrazu→JPEG w przeglądarce (Titan tylko JPEG/PNG).
-- ✅ Krok 1.6 — zasilenie **BRW** (Agata za Cloudflare → pivot). `scrape-brw.mjs` (JSON-LD) + `seed.mjs`. Baza: 28 produktów z embeddingiem.
+- ✅ Krok 1.6 — zasilenie **BRW** (Agata za Cloudflare → pivot). `scrape-brw.mjs` (JSON-LD) + `seed.mjs`. (Dane BRW były testowe — **usunięte** przy przejściu na realne katalogi; skrypty zostają jako referencja.)
 - 🎉 **Faza 1 ukończona.**
 - ✅ Krok 2.3 — `/search` (base64 wycinka → Titan → pgvector cosine → TOP N). **Rdzeń (substytuty) udowodniony na realnych danych.** Test: `scripts/test-search.mjs`.
-- ▶️ Reszta Fazy 2 (frontend): PdfViewer (react-pdf), ImageCropper (react-image-crop), ResultsList, SearchPage; potem test na 2 wizualizacjach (Krok 2.5).
+- ✅ Kroki 2.1/2.2/2.4 — front wyszukiwania: `SearchPage` (upload PDF/obraz → auto-detekcja → edytowalny crop → wyniki), `CatalogPage` (lista + usuwanie).
+- ✅ **Faza 2b (jakość dopasowania):**
+  - Multi-image: tabela `product_images` (embedding + `attributes` JSONB per zdjęcie). Migracje `002`/`003`.
+  - Opis wizualny (Sonnet 4.5) każdego zdjęcia wg `docs/product-description-spec.md`, z nazwą jako kontekstem (kotwiczy typ).
+  - Auto-detekcja `/detect` (Haiku 4.5 vision) — etykiety + boxy.
+  - **Retrieve → rerank:** `/search` = Titan TOP-8 → opis wycinka zapytania (Sonnet 4.5) → rerank sędziowski na zdjęciach+atrybutach z **oceną dopasowania 0-100** (nacisk kolor+materiał+bryła). Wyświetlane „dopasowanie %" = ocena rerankingu.
+  - Gotcha: obrazy BRW to PNG mimo `.jpg` → `_img_format` (magic-bytes) w describe/rerank/detect.
+- 🟡 Krok 2.5 — test pozytywny **zaliczony**: BRW-718047 (beżowa amerykanka) z wizualizacji → **#1** po rerankingu (mimo niższego kosinusa niż szare sofy). ⏳ Zostaje test alternatywny (produkt spoza bazy).
+- 📐 **Faza 5 — Import katalogu PDF producenta (zaprojektowana, do implementacji).** Wciąganie
+  produktów z katalogów PDF różnych kategorii (płytki/meble/sofy/krzesła/oświetlenie) z odniesieniem
+  do źródła (ID Optima LUB link do katalogu w S3 otwierany na właściwej stronie `#page=N`). Decyzje:
+  kreator z przeglądem, hybryda partiami stron, deklaracja domeny katalogu + auto-klasyfikacja per
+  produkt, **twarda bramka kategorii** (nie proponować lampy zamiast sofy — błąd dyskwalifikujący),
+  dedup (twardy unikat producent+kod + miękka flaga cosine >~0.97). Model: migracja `004` (tabela
+  `catalogs` + kolumny `source/category/catalog_id/catalog_page/manufacturer/manufacturer_code`,
+  `optima_id` nullable). Nowe endpointy: `/catalogs`, `/catalog/analyze-page`. Render PDF w
+  przeglądarce (jak w `SearchPage`) — bez bibliotek PDF w Lambdzie. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 5.
+  - ✅ **Ścieżka offline Maxlight 2026 (208 MB PDF) — ekstrakcja lokalna zrobiona** (`scripts/extract-maxlight.py`,
+    pymupdf, bez kosztów Bedrock): **243 produkty, 750 zdjęć** → `rawdata/maxlight/` (gitignore; odtwarzalne
+    z PDF). Podtyp deterministycznie z prefiksu kodu (P/W/C/T/F/S/H/M). Twarde dane z warstwy tekstu (PL|EN).
+    Atrybuty wizualne odłożone na v1. Seed do AWS (`seed-maxlight.mjs`) — po migracji 004.
+  - **Opis LLM adaptacyjny per kategoria** + generyczny `subtype` (`docs/product-description-spec.md` zaktualizowany;
+    prompty w handlerach `describe`/`analyze-page` do zsynchronizowania w ramach Fazy 5).
+  - ✅ **Kroki 5.1/5.3/5.4/5.8 ZROBIONE (wdrożone i przetestowane):**
+    - 5.1 migracja `004_catalogs.sql` (tabela `catalogs` + kolumny źródła/kategorii/podtypu, `optima_id` nullable, dedup unikat).
+    - 5.3 `/products` rozszerzony (category/subtype/source/manufacturer/manufacturerCode/catalogId/catalogPage,
+      `images:[{key,attributes?,sortOrder?}]`, `describe:false` = bez kosztu Sonnet, dedup po kodzie). **Kanoniczny zapis dla seeda i przyszłego UI.**
+    - 5.4 `/search` **twarda bramka kategorii** (opis Sonnet → `kategoria` → `WHERE category=`) + pola źródła w wyniku (`catalogUrl`+`#page=N`, `catalogPage`, `manufacturer`, `catalogName`). Zweryfikowane: lampa→lampy, krzesło→0 wyników.
+    - 5.8 **seed Maxlight zrobiony: 243 produkty, 750 zdjęć z embeddingiem w bazie**, katalog + PDF w S3 (`seed-maxlight.mjs`).
+    - Frontend: `ResultCard` pokazuje odniesienie do katalogu (link do PDF, strona). Baza po BRW → teraz **243 produkty Maxlight**.
+  - ⏸️ ODŁOŻONE: `/catalogs` CRUD + `/catalog/analyze-page` + UI importu z przeglądarki + miękka flaga duplikatów cosine (Krok 5.2/5.5), lista/usuwanie katalogów w UI (5.6).
+- 📐 **Faza 6 — Katalog (przegląd/edycja) + wyjaśnialność wyszukiwania (zaplanowana).** Zadania: tożsamość po UUID
+  (prerekwizyt — `optima_id` bywa NULL dla katalogu), `GET /products/{id}` (szczegóły), `PUT /products/{id}`
+  (edycja metadanych), `CatalogPage` z szukaniem/filtrami/podglądem/edycją, `/search` „wczytaj kolejne" (sterowany
+  `topK`), oraz **wyjaśnialność** wyniku (per-kandydat `powod` z rerankingu + `queryAttributes` + cosinus/ocena —
+  do celów analitycznych). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 6.
+- 📐 **Faza 7 — Role: panel handlowca + panel admina (zaplanowana).** Rozdział aplikacji: panel handlowca
+  (wyszukiwanie substytutów, katalog read-only, doprecyzowanie) i panel admina (import/edycja/usuwanie danych,
+  statystyki, **dokumentacja techniczna administracji** z `docs/admin-runbook.md` renderowanego w UI). Teraz
+  separacja UX + prosty gate; docelowo **Cognito + authorizer** (twarde zabezpieczenie API, Krok 7.4). Rozważyć
+  `react-router` + `react-markdown`. **Import/eksport kolekcji** (Krok 7.5): admin wgrywa/eksportuje kolekcje
+  przygotowane lokalnie; eksport zawiera embeddingi → re-import bez Bedrock. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
+- ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)
 - `MSYS_NO_PATHCONV=1` przed komendami z argumentami `/aws/...` (np. `aws logs`) — inaczej git bash konwertuje na ścieżkę Windows.
@@ -39,14 +81,20 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - Presigned S3: path-style + nie podpisywać Content-Type. Titan: obraz min. sensownego rozmiaru (1×1 = błąd).
 
 ## Zablokowane decyzje
-- **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne kadrowanie (`react-image-crop`)
-  + Claude vision. Auto-detekcja → iteracja 2.
+- **Detekcja obiektów: ścieżka A — bez Rekognition.** Ręczne (edytowalne) kadrowanie (`react-image-crop`)
+  + Claude vision. **Auto-detekcja (`/detect`, Haiku 4.5) zrobiona** — sugeruje etykiety + boxy, użytkownik akceptuje/poprawia.
 - **Modele Bedrock (eu-central-1, inference profile EU — dane w UE):**
-  - Ekstrakcja/NLP: Haiku 4.5 → `eu.anthropic.claude-haiku-4-5-20251001-v1:0` ✅
-  - Analiza wizualizacji: Sonnet 5 → `eu.anthropic.claude-sonnet-5` ⏸️ (dostęp do włączenia; potrzebny w Kroku 3.2)
+  - Ekstrakcja/NLP + auto-detekcja: Haiku 4.5 → `eu.anthropic.claude-haiku-4-5-20251001-v1:0` ✅
+  - Opis wizualny + rerank: **Sonnet 4.5** → `eu.anthropic.claude-sonnet-4-5-20250929-v1:0` ✅ (Sonnet 5 niedostępny → 4.5)
   - Embeddingi (1024): `amazon.titan-embed-image-v1` ✅
   - NIE używać Claude 3 Haiku (przestarzały).
 - **Embeddingi:** Amazon Titan Multimodal (1024 wym.).
+- **Kategoria = jedyny twardy filtr (od Fazy 5).** Substytut zawsze w tej samej kategorii; wszystko inne
+  (kolor, materiał, wymiar) pozostaje miękkie. Kontrolowana taksonomia wspólna dla importu i wyszukiwania.
+- **Tworzenie kolekcji = LOKALNIE (ograniczenie kosztów Bedrock).** Analiza katalogów (ekstrakcja/klasyfikacja/opis)
+  lokalnie (Claude Code), NIE na Bedrock vision. Na AWS tylko: (a) analiza dokumentu przy wyszukiwaniu (opis wycinka
+  + rerank), (b) embeddingi Titan (raz przy imporcie; **eksportowane** → re-import bez Bedrock). Import/eksport kolekcji
+  w panelu admina (Krok 7.5); eksport zawiera embeddingi. Interaktywny import z vision na AWS (5.2/5.5) odłożony.
 - **Baza:** RDS PostgreSQL + `pgvector`. **Backend:** Lambdy w Pythonie (runtime `python3.13`;
   lokalny Python 3.14 jest za nowy dla Lambdy). **IaC:** AWS CDK w **TypeScript** (kod w `infra/`).
 - **Frontend:** React (Vite) + TS + Tailwind + shadcn/ui + `react-pdf` + `react-image-crop`.

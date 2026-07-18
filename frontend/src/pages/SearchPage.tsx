@@ -294,22 +294,55 @@ function ResultCard({ r, rank }: { r: SearchResult; rank: number }) {
         <img src={r.imageUrl} alt={r.name} className="h-full w-full object-contain" />
       </div>
       <div className="text-xs text-slate-500">
-        #{rank} · podobieństwo {(r.similarity * 100).toFixed(0)}%
+        #{rank} · dopasowanie {(r.similarity * 100).toFixed(0)}%
       </div>
       <div className="line-clamp-2 text-sm font-medium">{r.name}</div>
-      <div className="mt-2 flex items-center gap-2">
-        <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{r.optimaId}</code>
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(r.optimaId);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
-          }}
-          className="text-xs text-blue-700 hover:underline"
-        >
-          {copied ? 'skopiowano ✓' : 'kopiuj ID'}
-        </button>
-      </div>
+
+      {r.optimaId && (
+        <div className="mt-2 flex items-center gap-2">
+          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{r.optimaId}</code>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(r.optimaId!);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1200);
+            }}
+            className="text-xs text-blue-700 hover:underline"
+          >
+            {copied ? 'skopiowano ✓' : 'kopiuj ID'}
+          </button>
+        </div>
+      )}
+
+      {r.source === 'catalog' && (
+        <div className="mt-2 space-y-0.5 text-xs text-slate-600">
+          <div>
+            {r.manufacturer && <span className="font-medium">{r.manufacturer}</span>}
+            {r.params?.codes != null && (
+              <code className="ml-1 rounded bg-slate-100 px-1.5 py-0.5">
+                {Array.isArray(r.params.codes) ? (r.params.codes as string[]).join(', ') : String(r.params.codes)}
+              </code>
+            )}
+          </div>
+          {r.catalogUrl && (
+            <a
+              href={r.catalogPage ? `${r.catalogUrl}#page=${r.catalogPage}` : r.catalogUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-700 hover:underline"
+            >
+              📄 {r.catalogName ?? 'Katalog'}
+              {/* Wyświetlamy numer DRUKARSKI (params.printed_page), a #page= kotwiczy stronę PDF */}
+              {r.params?.printed_page != null
+                ? `, str. ${r.params.printed_page}`
+                : r.catalogPage
+                  ? `, str. ${r.catalogPage}`
+                  : ''}{' '}
+              ↗
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }

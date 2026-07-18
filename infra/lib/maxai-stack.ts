@@ -13,6 +13,8 @@ import * as path from 'path';
 const HAIKU_MODEL_ID = 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
 // Model embeddingów (Titan Multimodal, 1024 wym.).
 const EMBED_MODEL_ID = 'amazon.titan-embed-image-v1';
+// Model vision (opis produktu + rerank) — Sonnet 4.5 (EU inference profile).
+const SONNET_MODEL_ID = 'eu.anthropic.claude-sonnet-4-5-20250929-v1:0';
 
 /**
  * Główny stack maxai.
@@ -163,6 +165,7 @@ export class MaxaiStack extends Stack {
         FILES_BUCKET: filesBucket.bucketName,
         DB_SECRET_ARN: db.secret!.secretArn,
         EMBED_MODEL_ID: EMBED_MODEL_ID,
+        DESCRIBE_MODEL_ID: SONNET_MODEL_ID,
       },
       timeout: Duration.seconds(30),
       memorySize: 512,
@@ -196,8 +199,9 @@ export class MaxaiStack extends Stack {
         FILES_BUCKET: filesBucket.bucketName,
         DB_SECRET_ARN: db.secret!.secretArn,
         EMBED_MODEL_ID: EMBED_MODEL_ID,
+        RERANK_MODEL_ID: SONNET_MODEL_ID,
       },
-      timeout: Duration.seconds(30),
+      timeout: Duration.seconds(60),
       memorySize: 512,
     });
     filesBucket.grantRead(searchFn); // presigned GET wyników
