@@ -42,6 +42,27 @@ Zmienne: `DB_SECRET` = nazwa sekretu z Secrets Manager (output stacku `DbSecretN
 - **Czyszczenie:** `PREFIX=BRW- DB_SECRET=<sekret> node scripts/db-clear.mjs` (po prefiksie optima_id).
 - **Deploy backendu/infra:** `cd infra && npx cdk deploy --require-approval never`.
 
+## Onboarding nowego katalogu (od PDF do bazy)
+
+Pełny przepływ (0 wywołań Bedrock vision):
+
+1. **Bootstrap:** `python scripts/prepare-catalog.py <pdf> <nazwa> [--manufacturer X] [--category Y]`
+   → sonduje PDF i tworzy `rawdata/<nazwa>/PROBE.json` + `CLAUDE_INSTRUCTIONS.md` + `samples/`.
+2. **Przygotowanie (Claude Code):** poproś: „**przygotuj katalog <nazwa>**". Claude wykona kroki z
+   `CLAUDE_INSTRUCTIONS.md` i wyprodukuje `rawdata/<nazwa>/collection.json` + `rawdata/<nazwa>/images/`.
+3. **Import (panel admina → Import kolekcji):** wybierz folder `rawdata/<nazwa>/` → aplikacja tworzy katalog,
+   wgrywa zdjęcia do S3 i zapisuje produkty (`describe:false`; embedding = Titan przy imporcie lub z paczki).
+4. (Opcjonalnie) PDF do S3 pod link „Otwórz katalog":
+   `aws s3 cp <pdf> s3://<bucket>/catalogs/<nazwa>/original.pdf`.
+
+## Import / eksport kolekcji
+
+- **Format paczki `collection.json`**: `{ catalog:{...}, products:[{ ..., images:[{file, role, attributes?, embedding?}] }] }`.
+- **Import (panel admina):** wybór folderu (`webkitdirectory`) → `POST /catalogs` → presign+upload zdjęć → `/products`.
+  Gdy paczka zawiera `embedding` — pomijany Titan (import bez Bedrock).
+- **Eksport:** panel admina → eksport katalogu → `GET /catalogs/{id}/export` zapisuje paczkę (z embeddingami)
+  do S3 i zwraca link do pobrania. Backup na wypadek czyszczenia bazy → re-import bez Bedrock.
+
 ## Odtworzenie bazy po czyszczeniu
 
 1. Migracje (`001`–`004`) jeśli świeża baza.

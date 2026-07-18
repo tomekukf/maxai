@@ -4,10 +4,11 @@ import SearchPage from './pages/SearchPage';
 import CatalogPage from './pages/CatalogPage';
 import StatsPage from './pages/StatsPage';
 import AdminDocsPage from './pages/AdminDocsPage';
+import ImportPage from './pages/ImportPage';
 
 type Area = 'user' | 'admin';
 type UserView = 'search' | 'catalog';
-type AdminView = 'catalog' | 'ingest' | 'stats' | 'docs';
+type AdminView = 'catalog' | 'import' | 'ingest' | 'stats' | 'docs';
 
 const ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) ?? '';
 
@@ -37,6 +38,7 @@ export default function App() {
           ) : adminUnlocked ? (
             <>
               <button className={tab(adminView === 'catalog')} onClick={() => setAdminView('catalog')}>Katalog</button>
+              <button className={tab(adminView === 'import')} onClick={() => setAdminView('import')}>Import kolekcji</button>
               <button className={tab(adminView === 'ingest')} onClick={() => setAdminView('ingest')}>Zasilanie</button>
               <button className={tab(adminView === 'stats')} onClick={() => setAdminView('stats')}>Statystyki</button>
               <button className={tab(adminView === 'docs')} onClick={() => setAdminView('docs')}>Dokumentacja</button>
@@ -57,6 +59,7 @@ export default function App() {
 
       {area === 'admin' && !adminUnlocked && <AdminGate onUnlock={() => setAdminUnlocked(true)} />}
       {area === 'admin' && adminUnlocked && adminView === 'catalog' && <CatalogPage admin />}
+      {area === 'admin' && adminUnlocked && adminView === 'import' && <ImportPage />}
       {area === 'admin' && adminUnlocked && adminView === 'ingest' && <IngestPage />}
       {area === 'admin' && adminUnlocked && adminView === 'stats' && <StatsPage />}
       {area === 'admin' && adminUnlocked && adminView === 'docs' && <AdminDocsPage />}

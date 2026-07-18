@@ -52,6 +52,67 @@ export async function uploadFile(file: File, prefix = 'product-images'): Promise
   return key;
 }
 
+// Upload pliku BEZ konwersji (import kolekcji — zdjęcia już są JPEG/PNG z ekstrakcji lokalnej).
+export async function uploadRaw(file: File, prefix = 'imported'): Promise<string> {
+  const { uploadUrl, key } = await presign(file.name, prefix);
+  const put = await fetch(uploadUrl, { method: 'PUT', body: file });
+  if (!put.ok) throw new Error(`upload: ${put.status}`);
+  return key;
+}
+
+export type CatalogMeta = {
+  name?: string;
+  manufacturer?: string;
+  domainCategory?: string;
+  pdfKey?: string;
+  pageCount?: number;
+};
+
+export async function createCatalog(meta: CatalogMeta): Promise<{ id: string }> {
+  const r = await fetch(`${API_URL}/catalogs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(meta),
+  });
+  if (!r.ok) throw new Error(`catalogs: ${r.status}`);
+  return r.json();
+}
+
+export type CatalogListItem = {
+  id: string;
+  name: string;
+  manufacturer: string;
+  domainCategory: string;
+  pageCount: number;
+  productCount: number;
+};
+
+export async function listCatalogs(): Promise<CatalogListItem[]> {
+  const r = await fetch(`${API_URL}/catalogs`, { method: 'GET' });
+  if (!r.ok) throw new Error(`catalogs list: ${r.status}`);
+  return (await r.json()).items ?? [];
+}
+
+export async function exportCatalog(id: string): Promise<{ downloadUrl: string; productCount: number }> {
+  const r = await fetch(`${API_URL}/catalogs/${encodeURIComponent(id)}/export`, { method: 'GET' });
+  if (!r.ok) throw new Error(`export: ${r.status}`);
+  return r.json();
+}
+
+// Zapis produktu z importu (surowe body — pola katalogowe, images z embeddingiem/attributes).
+export async function importProduct(body: Record<string, unknown>): Promise<{ id?: string; duplicate?: boolean }> {
+  const r = await fetch(`${API_URL}/products`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error ?? `products: ${r.status}`);
+  }
+  return r.json();
+}
+
 export async function extractParams(description: string): Promise<Record<string, unknown>> {
   const r = await fetch(`${API_URL}/extract`, {
     method: 'POST',

@@ -192,6 +192,17 @@ export class MaxaiStack extends Stack {
       methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
       integration: productsInteg,
     });
+    // Katalogi (import/eksport kolekcji) — obsługiwane przez tę samą Lambdę (ma DB/S3/pg8000).
+    httpApi.addRoutes({
+      path: '/catalogs',
+      methods: [HttpMethod.GET, HttpMethod.POST],
+      integration: productsInteg,
+    });
+    httpApi.addRoutes({
+      path: '/catalogs/{id}/export',
+      methods: [HttpMethod.GET],
+      integration: productsInteg,
+    });
 
     // --- Lambda: wyszukiwanie substytutów (embedding wycinka → pgvector) ---
     const searchFn = new lambda.Function(this, 'SearchFn', {

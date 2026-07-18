@@ -204,12 +204,17 @@ def _create(body):
         if not key:
             continue
         try:
-            obj = s3.get_object(Bucket=FILES_BUCKET, Key=key)
-            img_bytes = obj["Body"].read()
-            emb = _embed_image(img_bytes)
-            vec = "[" + ",".join(str(x) for x in emb) + "]"
             attrs = im.get("attributes")  # gotowe atrybuty (jeśli przekazane) mają priorytet
-            if attrs is None and do_describe:
+            emb_in = im.get("embedding")  # gotowy embedding (import kolekcji) → pomija Titan
+            img_bytes = None
+            # Bajty zdjęcia potrzebne tylko gdy liczymy embedding lub opis.
+            if emb_in is None or (attrs is None and do_describe):
+                img_bytes = s3.get_object(Bucket=FILES_BUCKET, Key=key)["Body"].read()
+            if emb_in is not None:
+                vec = emb_in if isinstance(emb_in, str) else "[" + ",".join(str(x) for x in emb_in) + "]"
+            else:
+                vec = "[" + ",".join(str(x) for x in _embed_image(img_bytes)) + "]"
+            if attrs is None and do_describe and img_bytes is not None:
                 attrs = _describe(img_bytes, name)  # opis wizualny (Sonnet 4.5), z kontekstem nazwy
             _db().run(
                 "INSERT INTO product_images (product_id, image_s3_url, embedding, attributes, sort_order) "
@@ -341,6 +346,84 @@ def _delete_all():
     return _resp(200, {"deleted": n})
 
 
+# ---------- katalogi (import/eksport kolekcji) ----------
+
+def _catalog_create(body):
+    name = body.get("name")
+    manufacturer = body.get("manufacturer")
+    domain = body.get("domainCategory")
+    pdf_key = body.get("pdfKey")
+    page_count = body.get("pageCount")
+    pdf_url = f"s3://{FILES_BUCKET}/{pdf_key}" if pdf_key else ""
+    rows = _db().run(
+        "INSERT INTO catalogs (name, manufacturer, domain_category, pdf_s3_url, page_count, status) "
+        "VALUES (:n, :m, :d, :u, :pc, 'ready') RETURNING id",
+        n=name, m=manufacturer, d=domain, u=pdf_url, pc=page_count,
+    )
+    return _resp(200, {"id": str(rows[0][0])})
+
+
+def _catalog_list():
+    rows = _db().run(
+        "SELECT c.id, c.name, c.manufacturer, c.domain_category, c.page_count, "
+        "(SELECT count(*) FROM products p WHERE p.catalog_id = c.id) AS product_count "
+        "FROM catalogs c ORDER BY c.created_at DESC"
+    )
+    items = [
+        {"id": str(cid), "name": n, "manufacturer": m, "domainCategory": d,
+         "pageCount": pc, "productCount": int(cnt)}
+        for cid, n, m, d, pc, cnt in rows
+    ]
+    return _resp(200, {"items": items})
+
+
+def _catalog_export(cid):
+    crow = _db().run(
+        "SELECT name, manufacturer, domain_category, pdf_s3_url, page_count "
+        "FROM catalogs WHERE id = CAST(:id AS uuid)", id=cid,
+    )
+    if not crow:
+        return _resp(404, {"error": "Nie znaleziono katalogu"})
+    name, manufacturer, domain, pdf_url, page_count = crow[0]
+    prows = _db().run(
+        "SELECT id, optima_id, name, params, category, subtype, manufacturer, manufacturer_code, catalog_page "
+        "FROM products WHERE catalog_id = CAST(:id AS uuid) ORDER BY catalog_page, created_at", id=cid,
+    )
+    products = []
+    for (pid, optima_id, pname, params, category, subtype, mfr, mfr_code, cpage) in prows:
+        imgs = _db().run(
+            "SELECT image_s3_url, attributes, sort_order, embedding::text "
+            "FROM product_images WHERE product_id = CAST(:id AS uuid) ORDER BY sort_order, created_at", id=str(pid),
+        )
+        images = [
+            {"key": u.replace(f"s3://{FILES_BUCKET}/", "", 1), "attributes": a,
+             "sortOrder": so, "embedding": emb}
+            for (u, a, so, emb) in imgs
+        ]
+        products.append({
+            "optimaId": optima_id, "name": pname, "params": params, "category": category,
+            "subtype": subtype, "manufacturer": mfr, "manufacturerCode": mfr_code,
+            "catalogPage": cpage, "images": images,
+        })
+    pkg = {
+        "catalog": {"name": name, "manufacturer": manufacturer, "domainCategory": domain,
+                    "pdfKey": pdf_url.replace(f"s3://{FILES_BUCKET}/", "", 1) if pdf_url else None,
+                    "pageCount": page_count},
+        "products": products,
+    }
+    # Paczka bywa duża (embeddingi) → zapis do S3 + presigned URL do pobrania (omija limit 6 MB API GW).
+    key = f"exports/{cid}.json"
+    s3.put_object(
+        Bucket=FILES_BUCKET, Key=key,
+        Body=json.dumps(pkg, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json",
+    )
+    return _resp(200, {
+        "downloadUrl": _presign_get(f"s3://{FILES_BUCKET}/{key}"),
+        "catalog": pkg["catalog"], "productCount": len(products),
+    })
+
+
 def _with_retry(fn):
     global _conn
     try:
@@ -354,9 +437,27 @@ def _with_retry(fn):
 
 
 def lambda_handler(event, _ctx):
-    method = event.get("requestContext", {}).get("http", {}).get("method", "POST")
+    http = event.get("requestContext", {}).get("http", {})
+    method = http.get("method", "POST")
+    path = event.get("rawPath") or http.get("path", "") or ""
     pp = event.get("pathParameters") or {}
     pid = pp.get("id") or pp.get("optimaId")  # ścieżka używa zmiennej {optimaId}, ale przyjmujemy UUID
+
+    # --- katalogi ---
+    if path.startswith("/catalogs"):
+        if method == "GET" and path.endswith("/export"):
+            return _with_retry(lambda: _catalog_export(pp.get("id")))
+        if method == "GET":
+            return _with_retry(_catalog_list)
+        if method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _resp(400, {"error": "Nieprawidłowy JSON"})
+            return _with_retry(lambda: _catalog_create(body))
+        return _resp(405, {"error": "Metoda nieobsługiwana"})
+
+    # --- produkty ---
     if method == "GET":
         return _with_retry((lambda: _detail(pid)) if pid else _list)
     if method == "DELETE":

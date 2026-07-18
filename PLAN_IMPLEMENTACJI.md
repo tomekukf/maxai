@@ -504,7 +504,7 @@ administracji rozwiązaniem + statystyki).
 **Krok 7.2 — Panel admina (zarządzanie danymi)** — 🟡 CZĘŚCIOWO
 - ✅ Zakładki: **Katalog** (`admin` — edycja/usuwanie), **Zasilanie** (`IngestPage`), **Statystyki**
   (`StatsPage`: produkty/zdjęcia/kategorie/z ID Optima + rozkłady kategoria/podtyp/źródło), **Dokumentacja**.
-- ⏳ Import katalogu PDF z UI (Faza 5.5) i zarządzanie katalogami (lista/usuń) — do zrobienia (import głównie przez 7.5).
+- ✅ **Import kolekcji** (zakładka, `ImportPage`) — patrz Krok 7.5. ⏳ Zarządzanie katalogami w UI (lista/usuń) — do zrobienia.
 
 **Krok 7.3 — Dokumentacja techniczna administracji (w panelu admina)** — ✅ ZROBIONE
 - `docs/admin-runbook.md` (architektura, zasoby AWS, procedury migracji/ekstrakcji/seedu/deployu/czyszczenia,
@@ -518,7 +518,7 @@ administracji rozwiązaniem + statystyki).
   Do czasu wdrożenia interim gate (7.0) jest wyłącznie UX.
 - ✅ Weryfikacja: bez ważnego tokena/roli API odrzuca operacje admina (401/403).
 
-**Krok 7.5 — Import/eksport kolekcji produktów/katalogów (panel admina)**
+**Krok 7.5 — Import/eksport kolekcji produktów/katalogów (panel admina)** — 🟡 ZROBIONE (backend wdrożony + UI; pełny round-trip do potwierdzenia klikalnie)
 - **Zasada (zablokowana decyzja):** kolekcje **powstają lokalnie** (bez vision na Bedrock). Panel admina
   służy do **wgrywania** gotowych kolekcji i ich **eksportu** (backup / transfer / re-import po czyszczeniu bazy).
 - **Format paczki `collection.json`** (jedno źródło dla importu i eksportu):
@@ -532,13 +532,15 @@ administracji rozwiązaniem + statystyki).
 - **Eksport:** `GET /catalogs/{id}/export` → `collection.json` z embeddingami + zdjęcia (klucze/URL lub zip).
 - **Nowe/rozszerzone endpointy:** `POST /catalogs` (create), `GET /catalogs` (lista), `GET /catalogs/{id}/export`;
   `/products` — opcjonalne `embedding` per zdjęcie (`images:[{key, embedding?, attributes?, sortOrder?}]`, pomija Titan).
-- ✅ Weryfikacja: eksport → wyczyszczenie bazy → import przez panel → identyczna liczba produktów i embeddingów,
-  **0 wywołań Bedrock** przy re-imporcie; wyszukiwanie działa jak przed czyszczeniem.
+- ✅ Zrobione: `POST/GET /catalogs`, `GET /catalogs/{id}/export` (paczka do S3 + presigned URL — omija limit 6 MB),
+  `/products` przyjmuje `embedding` per zdjęcie (pomija Titan). `ImportPage` (folder `webkitdirectory` → `createCatalog`
+  → presign+upload → `importProduct`, pasek postępu, log). Backend przetestowany (lista/eksport z embeddingami).
+- ⏳ Do potwierdzenia klikalnie: pełny round-trip (import folderu → eksport → wipe → re-import bez Bedrock).
 
-**Krok 7.6 — Onboarding katalogu: skrypt bootstrap + instrukcje dla Claude + gotowość panelu**
+**Krok 7.6 — Onboarding katalogu: skrypt bootstrap + instrukcje dla Claude + gotowość panelu** — ✅ ZROBIONE
 - **Cel:** jedną komendą lokalnie przygotować dowolny katalog PDF do importu — skrypt sonduje PDF i **generuje
   zestaw instrukcji dla Claude Code**, żeby ekstrakcja (różna per katalog) nie wymagała szukania „jak to zrobić".
-- **`scripts/prepare-catalog.mjs <pdf> <nazwa> [--manufacturer X] [--category Y]`** (lokalnie, bez AWS/Bedrock):
+- **`scripts/prepare-catalog.py <pdf> <nazwa> [--manufacturer X] [--category Y]`** (lokalnie, bez AWS/Bedrock):
   tworzy `rawdata/<nazwa>/`, sonduje PDF (liczba stron, rozkładówki, warstwa tekstu + próbka, obrazy osadzone,
   wykrycie indeksu), renderuje kilka próbek stron, zapisuje `PROBE.json` oraz **`CLAUDE_INSTRUCTIONS.md`**
   (dostosowana lista kroków: rozpoznaj układ, skopiuj i dostrój ekstraktor z szablonu, ustal mapowanie
@@ -546,10 +548,12 @@ administracji rozwiązaniem + statystyki).
   Na końcu wypisuje: „poproś Claude: »przygotuj katalog <nazwa>«".
 - **Szablon ekstraktora:** `extract-maxlight.py` jako wzorzec (parametryzowany/kopiowany per katalog).
 - **Instrukcja end-to-end w panelu admina:** sekcja w `docs/admin-runbook.md` (render w zakładce Dokumentacja)
-  opisująca cały przepływ: 1) `node scripts/prepare-catalog.mjs …`, 2) „Claude, przygotuj katalog <nazwa>",
+  opisująca cały przepływ: 1) `python scripts/prepare-catalog.py …`, 2) „Claude, przygotuj katalog <nazwa>",
   3) Import w panelu admina (Krok 7.5). Dzięki temu Claude i admin mają całość w jednym miejscu.
-- ✅ Weryfikacja: nowy (inny niż Maxlight) katalog PDF → skrypt → Claude wg instrukcji → `collection.json` + zdjęcia
-  → import w panelu → produkty w bazie i wyszukiwalne; **0 wywołań Bedrock vision** w całym procesie.
+- ✅ Zrobione: `scripts/prepare-catalog.py` (sonduje: strony/rozkładówki/warstwa tekstu/prefiksy kodów/indeks/próbki
+  → `PROBE.json` + `CLAUDE_INSTRUCTIONS.md` + `samples/`); szablon = `extract-maxlight.py`; instrukcja end-to-end w
+  `docs/admin-runbook.md` (render w panelu Dokumentacja). Bootstrap przetestowany na Maxlight.
+- ⏳ Do potwierdzenia: pełny onboarding nowego (innego) katalogu end-to-end.
 
 ---
 
