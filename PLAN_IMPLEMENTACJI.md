@@ -682,6 +682,33 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
 
 > Zasady przekrojowe (sekcja A): **Bedrock tylko za zgodą** (nowa praca lokalnie) oraz **bez cen** (dobór do wizualizacji).
 
+### Faza 11 — Źródła danych jako usuwalne partie + import w GUI + analiza PDF z GUI
+
+**Krok 11.1 — Dane jako usuwalny/odnawialny zakres („źródło")**
+- Każdy import = **źródło** = wiersz `catalogs` (`source` + nazwa + data). maxfliz: `source='web'`
+  („maxfliz — oferta publiczna"); katalogi PDF: `source='catalog'`. Produkty pod źródłem (`catalog_id`).
+- `DELETE /catalogs/{id}` (kaskada produktów + `product_images` + sprzątanie S3) → **usunięcie całego zakresu**;
+  ponowny scrape/analiza + import go odtwarza. GUI: **lista źródeł** (liczba produktów, data) + „Usuń źródło".
+- ✅ Weryfikacja: usunięcie źródła kasuje dokładnie jego produkty; re-import odtwarza; inne źródła nietknięte.
+
+**Krok 11.2 — Dedykowany import w panelu admina + instrukcja**
+- Rozbudowa „Import kolekcji": zakładka **Źródła** (lista/usuń) + tryby importu (folder paczki `collection.json`,
+  w przyszłości bezpośredni). **Instrukcja krok-po-kroku renderowana w GUI** (skąd wziąć rawdata, jak zaimportować).
+- ✅ Weryfikacja: admin importuje i zarządza źródłami bez potrzeby szukania „jak to zrobić".
+
+**Krok 11.3 — Analiza lokalnego PDF z poziomu GUI → rawdata → import (duży feature)**
+- **Cel:** z panelu admina wskazać PDF katalogu → analiza **lokalnie** (bez Bedrock) → rawdata → import przez GUI.
+- **Decyzja architektoniczna (do wyboru — GUI webowe nie uruchomi lokalnego Pythona/Claude):**
+  - **A) Ekstrakcja w przeglądarce (deterministyczna):** pdf.js (tekst+zdjęcia) + heurystyki (kod→subtype,
+    specs regex, port logiki `extract-maxlight`) → `collection.json` w przeglądarce → import. W pełni w GUI,
+    0 Bedrock, bez CLI. Minus: brak wizualnej analizy LLM; jakość zależna od układu katalogu.
+  - **B) Kreator w GUI + analiza lokalna Claude Code:** GUI = instrukcja/status; analiza przez `prepare-catalog.py`
+    + Claude; wynik (rawdata) wgrywany przez GUI. Zachowuje jakość LLM; nie „jeden klik".
+  - **C) Lokalny agent (localhost):** pomocnik na stacji wołany z GUI (pymupdf + lokalny LLM). Najbliżej „wyzwól
+    z GUI", ale wymaga uruchomienia pomocnika.
+  - **Rekomendacja:** A jako MVP (całość w GUI, deterministyczne, darmowe) + opcjonalne wzbogacenie lokalnym LLM (opisy wizualne) później.
+- ✅ Weryfikacja: admin wgrywa PDF w GUI → powstaje rawdata → import → produkty w bazie; 0 Bedrock w analizie.
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)

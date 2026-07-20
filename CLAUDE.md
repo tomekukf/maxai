@@ -93,6 +93,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   (pełna oferta publiczna, bez cen → rawdata → import; source='web' vs 'catalog'). 10.2 analiza/rozszerzenie modelu pod wiele
   kategorii (konwencje `params` per kategoria, taksonomia, `collection`). 10.3 redesign GUI w stylu maxfliz (Jost, #760039
   burgund, #108474 turkus, dużo grafiki). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 10.
+- 📐 **Faza 11 — źródła jako usuwalne partie + import/analiza z GUI (zaplanowana).** 11.1 dane jako „źródło"
+  (`catalogs`+`source`, `DELETE /catalogs/{id}` kaskada → łatwe wipe & re-import, lista źródeł w GUI). 11.2 dedykowany
+  import + instrukcja w GUI. 11.3 **analiza lokalnego PDF z GUI** → rawdata → import — DECYZJA architektoniczna
+  (A: ekstrakcja w przeglądarce pdf.js/deterministyczna [rekom.]; B: kreator + Claude Code lokalnie; C: lokalny agent).
+  Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 11.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)
