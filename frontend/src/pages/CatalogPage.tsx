@@ -73,7 +73,36 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
   }, [filtered]);
 
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const groupKey = (p: Product) => p.groupId || p.id;
+
+  function toggleSel(key: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(key) ? n.delete(key) : n.add(key);
+      return n;
+    });
+  }
+
+  // Scal wszystkie zaznaczone grupy w jedną (group_id pierwszej zaznaczonej).
+  async function mergeSelected() {
+    const sel = grouped.filter((g) => selected.has(groupKey(g[0])));
+    if (sel.length < 2) return;
+    const targetGid = groupKey(sel[0][0]);
+    const toUpdate = sel.flatMap((g) => g).filter((p) => (p.groupId || p.id) !== targetGid);
+    if (!confirm(`Połączyć ${sel.length} grup (${toUpdate.length + sel[0].length} produktów) w jedną?`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      for (const p of toUpdate) await updateProduct(p.id, { groupId: targetGid });
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // Scal grupę źródłową (przeciąganą) do grupy docelowej: ustaw group_id wszystkich elementów.
   async function mergeInto(src: Product[], dst: Product[]) {
@@ -164,8 +193,25 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
         {!items && !err && <div className="text-sm text-slate-500">Ładuję…</div>}
 
         {admin && items && (
-          <div className="text-xs text-slate-400">
-            💡 Przeciągnij kafelek na inny, aby połączyć produkty w grupę wariantów. Rozłączanie: w podglądzie produktu.
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-slate-400">
+              💡 Przeciągnij kafelek na inny albo zaznacz kilka (checkbox) i połącz w grupę. Rozłączanie: w podglądzie.
+            </span>
+            {selected.size > 0 && (
+              <>
+                <span className="text-slate-600">Zaznaczono: {selected.size}</span>
+                <button
+                  onClick={mergeSelected}
+                  disabled={busy || selected.size < 2}
+                  className="rounded bg-slate-900 px-2 py-1 font-medium text-white disabled:opacity-50"
+                >
+                  Połącz zaznaczone w grupę
+                </button>
+                <button onClick={() => setSelected(new Set())} className="rounded border border-slate-300 px-2 py-1">
+                  Wyczyść
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -201,10 +247,15 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
                       Usuń
                     </button>
                   )}
-                  {grp.length > 1 && (
-                    <span className="absolute left-1 top-1 z-10 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-white">
-                      {grp.length} wariantów
-                    </span>
+                  {admin && (
+                    <input
+                      type="checkbox"
+                      checked={selected.has(groupKey(p))}
+                      onChange={() => toggleSel(groupKey(p))}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Zaznacz do połączenia"
+                      className="absolute left-1 top-1 z-10 h-4 w-4 cursor-pointer"
+                    />
                   )}
                   <button onClick={() => setOpenId(p.id)} className="block w-full text-left">
                     <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
@@ -213,6 +264,7 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
                     <div className="text-[11px] text-slate-500">
                       <code>{p.optimaId ?? p.manufacturerCode ?? '—'}</code>
                       {p.subtype && <span className="ml-1 rounded bg-slate-100 px-1">{p.subtype}</span>}
+                      {grp.length > 1 && <span className="ml-1 rounded bg-slate-900/80 px-1 text-white">{grp.length} war.</span>}
                     </div>
                     <div className="line-clamp-2 text-xs font-medium">{p.name}</div>
                     {grp.length > 1 && (

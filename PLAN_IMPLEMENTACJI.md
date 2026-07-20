@@ -634,8 +634,8 @@ Formaty specyfikacji spójne w katalogu: `W` (moc), `lm`, `K` (barwa), `IP`, `°
   `group_id` w polach edytowalnych (`PUT`) + eksporcie.
 - Front: `SearchPage` i `CatalogPage` **zwijają warianty w jedną kartę** (badge „N wariantów" + kody);
   admin może poprawić `group_id` w edycji produktu.
-- **Łączenie w GUI (admin):** przeciągnięcie kafelka na inny w katalogu **scala grupy** (PUT `group_id` wszystkich
-  elementów grupy źródłowej); „Odłącz od grupy" w podglądzie produktu (ustawia własny `group_id`). Bez zmian backendu.
+- **Łączenie w GUI (admin):** (a) przeciągnięcie kafelka na inny **scala grupy**; (b) **zaznaczenie checkboxami
+  wielu** kafelków + „Połącz zaznaczone w grupę"; „Odłącz od grupy" w podglądzie produktu. PUT `group_id`, bez zmian backendu.
 - Koszt: 0 zł Bedrock (logika lokalna/DB). ✅ Weryfikacja: EMPIRE P0634D+P0635D (chrom+złoto, 121 W) →
   jedna grupa; P0636D (17 W) osobno; TRIAC nieprzemerdżony.
 
