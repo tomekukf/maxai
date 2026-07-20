@@ -82,7 +82,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   zaktualizował 285/287 (bez re-embed). ✅ 8.3 `/search` zwraca `id`/`subtype`/pełne `params`, a rerank+prompt
   uwzględniają specyfikacje. ✅ 8.4 rerank ocenia na **wszystkich** zdjęciach kandydata (w wyniku 1). ✅ 8.6
   `CatalogPage` — czytelna „Specyfikacja" + „Opis wizualny" w podglądzie (edycja przez params JSON w adminie).
-  📐 8.5 opisy wizualne (`attributes`) — 0/891, do wygenerowania LOKALNIE (konsumpcja gotowa). Szczegóły: Faza 8.
+  🟡 8.5 opisy wizualne (`attributes`) — **pilot zrobiony (16 umywalek), reszta do dogenerowania LOKALNIE**. Narzędzia:
+  `scripts/describe-fetch.mjs` (pobiera z S3 zdjęcia bez opisu + manifest, filtry CATEGORY/NAME_LIKE/NAME_NOT_LIKE/PRIMARY_ONLY) →
+  Claude opisuje wg `docs/product-description-spec.md` → `attributes.json` → `scripts/describe-writeback.mjs`
+  (`UPDATE product_images.attributes`, bez re-embeddingu). **Zweryfikowane:** zapytanie kwadratową umywalką → kwadratowe
+  warianty (inny kolor) na górze, okrągłe zdegradowane (kształt rządzi). Szczegóły: Faza 8.
 - 🎉 **Faza 9 — UX katalogu + grupowanie wariantów (zrobione).** 9.0 lightbox miniatur w podglądzie. 9.1 szybkie
   otwieranie strony katalogu: `render-catalog-pages.py` → JPEG stron w S3 (`catalogs/<folder>/pages/pN.jpg`);
   `/search` i `/products/{id}` zwracają `catalogPageImageUrl`; front otwiera lekki obraz (nie 200 MB PDF), „(cały PDF)"
