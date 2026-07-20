@@ -5,12 +5,14 @@ import CatalogPage from './pages/CatalogPage';
 import StatsPage from './pages/StatsPage';
 import AdminDocsPage from './pages/AdminDocsPage';
 import ImportPage from './pages/ImportPage';
+import ShortlistPage from './pages/ShortlistPage';
 import { login, loadSession, logout, isAdmin, type Session } from './lib/auth';
 import { setAuthToken } from './lib/api';
+import { useShortlist } from './lib/shortlist';
 
 type Area = 'user' | 'admin';
-type UserView = 'search' | 'catalog';
-type AdminView = 'search' | 'catalog' | 'import' | 'ingest' | 'stats' | 'docs';
+type UserView = 'search' | 'catalog' | 'shortlist';
+type AdminView = 'search' | 'catalog' | 'shortlist' | 'import' | 'ingest' | 'stats' | 'docs';
 
 export default function App() {
   const [area, setArea] = useState<Area>('user');
@@ -18,6 +20,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [userView, setUserView] = useState<UserView>('search');
   const [adminView, setAdminView] = useState<AdminView>('catalog');
+  const shortlist = useShortlist();
+  const schowekLabel = `Schowek${shortlist.length ? ` (${shortlist.length})` : ''}`;
 
   useEffect(() => {
     const s = loadSession();
@@ -57,6 +61,7 @@ export default function App() {
             <>
               <button className={tab(userView === 'search')} onClick={() => setUserView('search')}>Wyszukiwanie</button>
               <button className={tab(userView === 'catalog')} onClick={() => setUserView('catalog')}>Katalog</button>
+              <button className={tab(userView === 'shortlist')} onClick={() => setUserView('shortlist')}>{schowekLabel}</button>
               <span className="ml-auto text-xs text-slate-400">{session.username}</span>
               {admin && (
                 <button className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={() => setArea('admin')}>
@@ -69,6 +74,7 @@ export default function App() {
             <>
               <button className={tab(adminView === 'search')} onClick={() => setAdminView('search')}>Wyszukiwanie</button>
               <button className={tab(adminView === 'catalog')} onClick={() => setAdminView('catalog')}>Katalog</button>
+              <button className={tab(adminView === 'shortlist')} onClick={() => setAdminView('shortlist')}>{schowekLabel}</button>
               <button className={tab(adminView === 'import')} onClick={() => setAdminView('import')}>Import kolekcji</button>
               <button className={tab(adminView === 'ingest')} onClick={() => setAdminView('ingest')}>Zasilanie</button>
               <button className={tab(adminView === 'stats')} onClick={() => setAdminView('stats')}>Statystyki</button>
@@ -85,9 +91,11 @@ export default function App() {
 
       {area === 'user' && userView === 'search' && <SearchPage />}
       {area === 'user' && userView === 'catalog' && <CatalogPage admin={false} />}
+      {area === 'user' && userView === 'shortlist' && <ShortlistPage />}
 
       {area === 'admin' && admin && adminView === 'search' && <SearchPage />}
       {area === 'admin' && admin && adminView === 'catalog' && <CatalogPage admin />}
+      {area === 'admin' && admin && adminView === 'shortlist' && <ShortlistPage />}
       {area === 'admin' && admin && adminView === 'import' && <ImportPage />}
       {area === 'admin' && admin && adminView === 'ingest' && <IngestPage />}
       {area === 'admin' && admin && adminView === 'stats' && <StatsPage />}

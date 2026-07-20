@@ -10,6 +10,7 @@ import {
   type ProductImage,
   type ProductPatch,
 } from '../lib/api';
+import { useShortlist, toggleShortlist } from '../lib/shortlist';
 
 const btn = 'rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50';
 
@@ -300,6 +301,8 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
   const [form, setForm] = useState<ProductPatch>({});
   const [paramsText, setParamsText] = useState('');
   const [zoom, setZoom] = useState<string | null>(null); // powiększone zdjęcie (lightbox)
+  const shortlist = useShortlist();
+  const inSL = !!d && shortlist.some((x) => x.id === d.id);
 
   useEffect(() => {
     getProduct(id)
@@ -334,9 +337,19 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
     <>
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
       <div className="my-8 w-full max-w-2xl rounded-lg bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="font-semibold">{d?.name ?? 'Produkt'}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+          <div className="flex items-center gap-3">
+            {d && (
+              <button
+                onClick={() => toggleShortlist({ id: d.id, name: d.name, code: d.optimaId ?? d.manufacturerCode ?? (d.params?.sku as string | undefined) ?? null, source: d.source, manufacturer: d.manufacturer, imageUrl: d.images[0]?.imageUrl })}
+                className={inSL ? 'text-xs font-medium text-accent-dark' : 'text-xs text-slate-500 hover:text-brand'}
+              >
+                {inSL ? '★ W schowku' : '☆ Do schowka'}
+              </button>
+            )}
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+          </div>
         </div>
 
         {err && <div className="mb-2 text-sm text-red-700">{err}</div>}

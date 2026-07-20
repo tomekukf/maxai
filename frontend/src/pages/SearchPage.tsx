@@ -4,6 +4,7 @@ import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { searchByImage, detectItems, type SearchResult, type DetectedItem } from '../lib/api';
 import { loadSession, isAdmin } from '../lib/auth';
+import { useShortlist, toggleShortlist } from '../lib/shortlist';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -441,6 +442,10 @@ function ResultCard({
   const [copied, setCopied] = useState(false);
   const [skuCopied, setSkuCopied] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
+  const shortlist = useShortlist();
+  const sid = r.id ?? r.optimaId ?? r.name;
+  const inShortlist = shortlist.some((x) => x.id === sid);
+  const code = r.optimaId ?? (r.params?.sku as string | undefined) ?? (r.params?.codes as string[] | undefined)?.[0] ?? null;
   return (
     <div className="overflow-hidden rounded-xl border bg-white shadow-card transition hover:shadow-md">
       <div className="aspect-square overflow-hidden bg-slate-100">
@@ -513,12 +518,17 @@ function ResultCard({
         </div>
       )}
 
-      <button
-        onClick={() => setShowWhy((s) => !s)}
-        className="mt-2 text-xs text-blue-700 hover:underline"
-      >
-        {showWhy ? 'Ukryj' : 'Dlaczego podobne?'}
-      </button>
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={() => toggleShortlist({ id: sid, name: r.name, code, source: r.source, manufacturer: r.manufacturer, imageUrl: r.imageUrl })}
+          className={inShortlist ? 'text-xs font-medium text-accent-dark' : 'text-xs text-slate-500 hover:text-brand'}
+        >
+          {inShortlist ? '★ W schowku' : '☆ Do schowka'}
+        </button>
+        <button onClick={() => setShowWhy((s) => !s)} className="text-xs text-blue-700 hover:underline">
+          {showWhy ? 'Ukryj' : 'Dlaczego podobne?'}
+        </button>
+      </div>
       {showWhy && <WhyPanel r={r} queryAttrs={queryAttrs} />}
       </div>
     </div>
