@@ -13,13 +13,29 @@ export type ShortItem = {
 
 const KEY = 'maxai_shortlist';
 const listeners = new Set<() => void>();
+const EMPTY: ShortItem[] = [];
+
+// Cache snapshotu — useSyncExternalStore wymaga STABILNEJ referencji między wywołaniami
+// getSnapshot, dopóki dane się nie zmienią (inaczej pętla „Maximum update depth exceeded").
+let cacheStr = '';
+let cache: ShortItem[] = EMPTY;
 
 function read(): ShortItem[] {
+  let str: string;
   try {
-    return JSON.parse(localStorage.getItem(KEY) || '[]');
+    str = localStorage.getItem(KEY) || '[]';
   } catch {
-    return [];
+    return EMPTY;
   }
+  if (str !== cacheStr) {
+    cacheStr = str;
+    try {
+      cache = JSON.parse(str);
+    } catch {
+      cache = EMPTY;
+    }
+  }
+  return cache;
 }
 function write(items: ShortItem[]) {
   localStorage.setItem(KEY, JSON.stringify(items));
@@ -53,5 +69,5 @@ function subscribe(cb: () => void) {
 }
 
 export function useShortlist(): ShortItem[] {
-  return useSyncExternalStore(subscribe, read, () => []);
+  return useSyncExternalStore(subscribe, read, () => EMPTY);
 }
