@@ -767,6 +767,12 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
   producent/odniesienie) + **link referencyjny** (do produktu na maxfliz / strony katalogu). Prawdopodobnie spięte ze
   „Schowkiem" (już zbiera kandydatów) — selekcja = źródło tabeli. Frontend-only (druk/HTML). Bez cen.
 
+**Krok 12.5 — Hardening reranku (koniec `rerank=null`)** — ✅ ZROBIONE (wdrożone)
+- Przyczyna intermittentnego `rerank=null` (fallback na goły kosinus → np. okrągła vs kwadratowa umywalka): sędzia
+  ucinał JSON przy `maxTokens=600` (wielu kandydatów + uzasadnienia) → parse fail. Fix: `maxTokens=2000`, **retry (1×)**,
+  **odzysk częściowego JSON** (`_salvage_rerank_items` regexem), log `stopReason`.
+- ✅ Weryfikacja: 4/4 z pełnymi ocenami, `stopReason=end_turn` (bez ucinania).
+
 **Krok 12.4 — F2: wzbogacenie kontekstu dodatkowym źródłem (rysunek techniczny / wymiary)** — 📐 ZAPLANOWANE
 - F2a (typ/kształt z rysunku — bez przepisania danych) → F2b (wymiary — wymaga backfillu wymiarów do `params`, lokalnie/0 Bedrock).
   Wymiary jako sygnał **miękki**, nigdy twardy filtr. Anti-halucynacja: ekstrahuj tylko czytelne, transparentnie pokaż odczyt. (Szczegóły w rozmowie/analizie.)
