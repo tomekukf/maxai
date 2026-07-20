@@ -203,7 +203,7 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
                 <button
                   onClick={mergeSelected}
                   disabled={busy || selected.size < 2}
-                  className="rounded bg-slate-900 px-2 py-1 font-medium text-white disabled:opacity-50"
+                  className="rounded bg-brand px-2 py-1 font-medium text-white hover:bg-brand-dark disabled:opacity-50"
                 >
                   Połącz zaznaczone w grupę
                 </button>
@@ -222,7 +222,7 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
               return (
                 <div
                   key={p.groupId || p.id}
-                  className={`relative rounded-lg border bg-white p-2 ${admin && dragKey && dragKey !== groupKey(p) ? 'ring-1 ring-dashed ring-slate-300' : ''}`}
+                  className={`relative rounded-xl border bg-white p-2 shadow-card transition hover:shadow-md ${admin && dragKey && dragKey !== groupKey(p) ? 'ring-2 ring-dashed ring-accent' : ''}`}
                   draggable={admin}
                   onDragStart={() => setDragKey(groupKey(p))}
                   onDragEnd={() => setDragKey(null)}
@@ -431,7 +431,7 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
                 </div>
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setEdit(false)} disabled={saving} className={btn}>Anuluj</button>
-                  <button onClick={save} disabled={saving} className="rounded bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+                  <button onClick={save} disabled={saving} className="rounded bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50">
                     {saving ? 'Zapisuję…' : 'Zapisz'}
                   </button>
                 </div>

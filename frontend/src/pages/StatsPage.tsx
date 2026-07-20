@@ -53,8 +53,8 @@ function Wrap({ children }: { children: React.ReactNode }) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border bg-white p-3">
-      <div className="text-2xl font-semibold">{value}</div>
+    <div className="rounded-xl border bg-white p-3 shadow-card">
+      <div className="text-2xl font-semibold text-brand">{value}</div>
       <div className="text-xs text-slate-500">{label}</div>
     </div>
   );
