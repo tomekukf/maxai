@@ -439,6 +439,7 @@ function ResultCard({
   variants?: SearchResult[];
 }) {
   const [copied, setCopied] = useState(false);
+  const [skuCopied, setSkuCopied] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   return (
     <div className="rounded-lg border bg-white p-3">
@@ -475,28 +476,33 @@ function ResultCard({
         </div>
       )}
 
-      {r.source === 'catalog' && (
+      {(r.source === 'catalog' || r.source === 'web') && (
         <div className="mt-2 space-y-0.5 text-xs text-slate-600">
           {r.manufacturer && <div className="font-medium">{r.manufacturer}</div>}
-          {(r.catalogPageImageUrl || r.catalogUrl) && (
-            <div className="flex flex-wrap gap-2">
-              {/* Otwiera LEKKI obraz strony (~200 KB) w tej samej karcie; numer DRUKARSKI do wyświetlenia. */}
-              <a
-                href={r.catalogPageImageUrl ?? r.catalogUrl}
-                target="maxai-katalog"
-                rel="noreferrer"
+          {r.params?.sku != null && r.params.sku !== '' && (
+            <div className="flex items-center gap-2">
+              <span>SKU: <code className="rounded bg-slate-100 px-1">{String(r.params.sku)}</code></span>
+              <button
+                onClick={() => { navigator.clipboard.writeText(String(r.params!.sku)); setSkuCopied(true); setTimeout(() => setSkuCopied(false), 1200); }}
                 className="text-blue-700 hover:underline"
               >
+                {skuCopied ? 'skopiowano ✓' : 'kopiuj SKU'}
+              </button>
+            </div>
+          )}
+          {r.source === 'web' && r.params?.product_url != null && (
+            <a href={String(r.params.product_url)} target="maxfliz" rel="noreferrer" className="text-blue-700 hover:underline">
+              🔗 Zobacz na maxfliz ↗
+            </a>
+          )}
+          {r.source === 'catalog' && (r.catalogPageImageUrl || r.catalogUrl) && (
+            <div className="flex flex-wrap gap-2">
+              <a href={r.catalogPageImageUrl ?? r.catalogUrl} target="maxai-katalog" rel="noreferrer" className="text-blue-700 hover:underline">
                 📄 {r.catalogName ?? 'Katalog'}
                 {r.params?.printed_page != null ? `, str. ${r.params.printed_page}` : r.catalogPage ? `, str. ${r.catalogPage}` : ''} ↗
               </a>
               {r.catalogUrl && (
-                <a
-                  href={r.catalogPage ? `${r.catalogUrl}#page=${r.catalogPage}` : r.catalogUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-slate-400 hover:underline"
-                >
+                <a href={r.catalogPage ? `${r.catalogUrl}#page=${r.catalogPage}` : r.catalogUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:underline">
                   (cały PDF)
                 </a>
               )}
