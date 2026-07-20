@@ -17,23 +17,51 @@ const VENDOR = (process.env.VENDOR ?? '').trim().toUpperCase();
 const NOIMAGES = !!process.env.NOIMAGES;
 const UA = 'maxai-catalog-sync/1.0 (+kontakt: maxfliz)';
 
-const TILE = new Set(['COEM', 'GRESPANIA', 'MIRAGE', 'ATLAS CONCORDE', 'RAGNO', 'EQUIPE', 'PROVENZA', 'PORCELANOSA', 'MARAZZI', 'CERAMICA']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const slug = (s) => (s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const codeOf = (title) => (title.match(/\b([A-Z]\d{3,4}[A-Z]?)\b/) || [])[1] ?? null;
 
+// Mapa producent → domyślna kategoria (gdy tytuł nie rozstrzyga).
+const VENDOR_CAT = {
+  MAXLIGHT: 'oswietlenie',
+  COEM: 'plytki', GRESPANIA: 'plytki', MIRAGE: 'plytki', 'ATLAS CONCORDE': 'plytki', RAGNO: 'plytki',
+  EQUIPE: 'plytki', PROVENZA: 'plytki', PORCELANOSA: 'plytki', MARAZZI: 'plytki',
+  'TER HURNE': 'podlogi',
+  MOBI: 'lazienka', VDS: 'lazienka', AXOR: 'lazienka', HANSGROHE: 'lazienka',
+  ORAC: 'sztukateria', PROGIP: 'sztukateria',
+  DEWRO: 'drzwi',
+  WALLCOLORS: 'tapety', WALLCRAFT: 'tapety', 'WALL ART': 'tapety', "STYL'EDITIONS": 'tapety',
+  MAXDIVANI: 'sofa', 'NICOLETTI HOME': 'sofa', NOBONOBO: 'sofa',
+  'BONTEMPI CASA': 'mebel', CALLIGARIS: 'mebel', BONALDO: 'mebel', BIZZOTTO: 'mebel', MAXLIVING: 'mebel', HIOORO: 'mebel',
+};
+
+// Reguły słów kluczowych (priorytet nad vendorem) — najbardziej specyficzne najpierw.
+const TITLE_RULES = [
+  [/\blustr/, 'lustro'],
+  [/\bdrzwi\b/, 'drzwi'],
+  [/\bumywalk|bateri|prysznic|wanna|brodzik|bidet|wc\b|misk|desk[ai] |st[eé]la\b|syfon|odpływ|kabina/, 'lazienka'],
+  [/\bpłytk|gres|mozaik|terakot|klinkier/, 'plytki'],
+  [/\bpanel|podłog|deska podłog|winyl|laminat/, 'podlogi'],
+  [/\bsztukateri|rozet|listw|profil|gzyms|filar|sztukater/, 'sztukateria'],
+  [/\btapet|fototapet|okleina|farba|farby/, 'tapety'],
+  [/\blamp|kinkiet|żyrandol|plafon|reflektor|oczko|led\b/, 'oswietlenie'],
+  [/\bsofa|kanapa|naroż/, 'sofa'],
+  [/\bfotel/, 'fotel'],
+  [/\bkrzes|hoker|taboret/, 'krzeslo'],
+  [/\bstolik|ława\b/, 'stolik'],
+  [/\bst[oó][łl]\b/, 'stol'],
+  [/\błóżk|lozk/, 'lozko'],
+  [/\bkomod/, 'komoda'],
+  [/\bszaf/, 'szafka'],
+  [/\bregał|regal/, 'regal'],
+  [/\bdywan/, 'dywan'],
+  [/\bdoniczk|wazon|świec|dekoracj/, 'dekoracja'],
+];
+
 function categoryOf(vendor, title) {
-  const v = (vendor || '').toUpperCase();
   const t = (title || '').toLowerCase();
-  if (v === 'MAXLIGHT' || /\blamp|kinkiet|żyrandol|plafon|reflektor|oczko|listwa/.test(t)) return 'oswietlenie';
-  if (TILE.has(v) || /\bpłytk|gres|mozaik/.test(t)) return 'plytki';
-  if (/\bsofa|kanapa|naroż/.test(t)) return 'sofa';
-  if (/\bfotel/.test(t)) return 'fotel';
-  if (/\bkrzes/.test(t)) return 'krzeslo';
-  if (/\bstolik/.test(t)) return 'stolik';
-  if (/\bst[oó][łl]/.test(t)) return 'stol';
-  if (/\bdywan/.test(t)) return 'dywan';
-  return 'inne';
+  for (const [re, cat] of TITLE_RULES) if (re.test(t)) return cat;
+  return VENDOR_CAT[(vendor || '').toUpperCase()] ?? 'inne';
 }
 
 const PREFIX_SUB = { P: 'wiszaca', W: 'kinkiet', C: 'plafon', T: 'stolowa', F: 'podlogowa', S: 'reflektor_szynowy', H: 'downlight' };

@@ -112,8 +112,8 @@ def _img_format(b: bytes) -> str:
 # Adaptacyjny per kategoria (docs/product-description-spec.md) — opis wycinka zapytania.
 # NAJPIERW kategoria (kanoniczny slug) + subtype — budują bramkę i sygnał różnicujący.
 CANON_CATEGORIES = (
-    "sofa, naroznik, fotel, krzeslo, stol, stolik, lozko, szafka, komoda, regal, "
-    "oswietlenie, plytki, dywan, dekoracja, inne"
+    "sofa, naroznik, fotel, krzeslo, stol, stolik, lozko, szafka, komoda, regal, mebel, "
+    "oswietlenie, plytki, podlogi, lazienka, drzwi, tapety, sztukateria, lustro, dywan, dekoracja, inne"
 )
 DESCRIBE_SYSTEM = (
     "Jesteś ekspertem od opisu wizualnego mebli i produktów wnętrzarskich (meble, oświetlenie, "
@@ -134,8 +134,15 @@ _CAT_SYNONYMS = {
     "kanapa": "sofa", "sofa": "sofa", "naroznik": "naroznik", "narożnik": "naroznik",
     "fotel": "fotel", "krzeslo": "krzeslo", "krzesło": "krzeslo", "stol": "stol",
     "stół": "stol", "stolik": "stolik", "lozko": "lozko", "łóżko": "lozko",
-    "szafka": "szafka", "komoda": "komoda", "regal": "regal", "regał": "regal",
-    "plytki": "plytki", "płytki": "plytki", "dywan": "dywan",
+    "szafka": "szafka", "komoda": "komoda", "regal": "regal", "regał": "regal", "mebel": "mebel",
+    "plytki": "plytki", "płytki": "plytki", "gres": "plytki", "dywan": "dywan",
+    # kategorie z oferty maxfliz:
+    "podlogi": "podlogi", "podłoga": "podlogi", "podloga": "podlogi", "panel": "podlogi", "panele": "podlogi",
+    "lazienka": "lazienka", "łazienka": "lazienka", "umywalka": "lazienka", "bateria": "lazienka",
+    "prysznic": "lazienka", "wanna": "lazienka", "wc": "lazienka", "armatura": "lazienka", "brodzik": "lazienka",
+    "drzwi": "drzwi", "tapeta": "tapety", "tapety": "tapety", "fototapeta": "tapety",
+    "sztukateria": "sztukateria", "listwa": "sztukateria", "rozeta": "sztukateria",
+    "lustro": "lustro", "lustra": "lustro", "dekoracja": "dekoracja",
 }
 
 

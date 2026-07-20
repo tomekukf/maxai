@@ -91,8 +91,10 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - 📐 **Faza 10 — maxfliz jako źródło + wielokategoryjność + redesign UI (zaplanowana).** Klient = **maxfliz.pl** (Shopify;
   publiczne `/products.json`, robots OK, Crawl-delay 1; vendorzy: płytki/oświetlenie/meble). 10.1 `scrape-maxfliz.mjs`
   (pełna oferta publiczna, bez cen → rawdata → import; source='web' vs 'catalog'). 10.2 analiza/rozszerzenie modelu pod wiele
-  kategorii (konwencje `params` per kategoria, taksonomia, `collection`). 10.3 redesign GUI w stylu maxfliz (Jost, #760039
-  burgund, #108474 turkus, dużo grafiki). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 10.
+  kategorii. **10.2 klasyfikacja ZROBIONA: 0 „inne"** (3749 produktów sklasyfikowanych; taksonomia rozszerzona o
+  podlogi/lazienka/drzwi/tapety/sztukateria/lustro/mebel — w spec + `/search`). 10.3 redesign GUI w stylu maxfliz (Jost,
+  #760039 burgund, #108474 turkus). **10.4 detekcja proponuje tylko kategorie z bazy** (nie sugeruj spoza oferty) — zaplanowane.
+  Import maxfliz (3749) czeka na zgodę (Titan ~kilka zł). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 10.
 - 📐 **Faza 11 — źródła jako usuwalne partie + import/analiza z GUI (zaplanowana).** 11.1 dane jako „źródło"
   (`catalogs`+`source`, `DELETE /catalogs/{id}` kaskada → łatwe wipe & re-import, lista źródeł w GUI). 11.2 dedykowany
   import + instrukcja w GUI. 11.3 **onboarding PDF = instrukcja w GUI** (Dokumentacja) + wiedza w kontekście Claude +

@@ -665,15 +665,22 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
   spoza strony) vs `optima`.
 - ✅ Weryfikacja: pełny zaciąg → import → produkty wyszukiwalne; brak duplikatów; MAXLIGHT z web scala się z katalogiem po kodzie.
 
-**Krok 10.2 — Analiza i rozszerzenie modelu danych pod wiele kategorii (temat 2)**
-- Analiza obecnego modelu: `products.params` (JSONB — elastyczny, różne klucze per kategoria) + `category/subtype/source/
-  group_id/manufacturer/manufacturer_code` + `product_images`. **Wniosek wstępny:** rdzeń wystarcza (JSONB skaluje się na
-  kategorie), ale brakuje: (a) **konwencji `params` per kategoria** (płytki: format/rozmiar/powierzchnia/kolekcja/imitacja;
-  meble: wymiary/materiał_obicia/typ; oświetlenie: mamy — moc/lm/K/IP/kąt), (b) pola **`collection`/seria**, (c) uporządkowania
-  wartości `source` ('web'|'catalog'|'optima'), (d) rozszerzenia **taksonomii** (płytki, dywan, podkategorie mebli).
-- Do zrobienia: `docs/params-per-category.md` (konwencje kluczy), ew. migracja (kolumna `collection`), rozszerzona taksonomia
-  w spec opisu; **bez rewolucji** — JSONB zostaje, zmiany addytywne.
-- ✅ Weryfikacja: model przyjmuje płytki + meble + oświetlenie bez utraty danych; filtry/bramka kategorii działają per kategoria.
+**Krok 10.2 — Analiza modelu + klasyfikacja kategorii (temat 2)** — 🟡 KLASYFIKACJA ZROBIONA
+- **Klasyfikacja: ✅** poprawione mapowanie w `scrape-maxfliz.mjs` (mapa vendorów + reguły słów kluczowych, lokalnie/0 Bedrock)
+  → **wszystkie 3749 produktów mają kategorię, „inne" = 0.** Rozkład: płytki 1310, oświetlenie 856, **łazienka 832**, dywan 180,
+  podłogi 165, mebel 99, tapety 63, sofa 62, stolik 54, krzeslo 44, fotel 25, drzwi 23, komoda 14, szafka 10, lustro 5, sztukateria 4, regal 3.
+- **Taksonomia rozszerzona: ✅** o `podlogi, lazienka, drzwi, tapety, sztukateria, lustro, mebel` — w `docs/product-description-spec.md`
+  oraz w `/search` (kanoniczne kategorie + synonimy + bramka). Model `params` (JSONB) — bez zmian, skaluje się.
+- ⏳ Do zrobienia (reszta modelu): `docs/params-per-category.md` (konwencje kluczy per kategoria), ew. pole `collection`/seria.
+- ✅ Weryfikacja: 0 „inne"; bramka kategorii rozpoznaje nowe kategorie.
+
+**Krok 10.4 — Detekcja proponuje tylko kategorie dostępne w bazie (nowy wymóg)**
+- **Cel:** po auto-detekcji elementów z wizualizacji (`/detect`) pokazywać do wyszukania **tylko te, których kategorię mamy
+  w bazie** (nie proponować np. „doniczki", jeśli takich produktów nie mamy).
+- Plan: (a) lekki `GET /categories` (DISTINCT `category` z produktów, z licznikami); (b) mapowanie etykiety detekcji → kanoniczna
+  kategoria (słownik, jak w `/search`); (c) w `SearchPage` filtrować podpowiedzi do kategorii obecnych w bazie (reszta ukryta
+  lub wyszarzona „brak w ofercie"). Lokalnie/0 Bedrock (detekcja `/detect` już istnieje).
+- ✅ Weryfikacja: detekcja pokazuje tylko elementy z posiadanych kategorii; brak sugestii spoza oferty.
 
 **Krok 10.3 — Redesign GUI w stylu maxfliz (temat 3) — „menedżerowie kupują oczami"**
 - Styl maxfliz (rozpoznany): font **Jost**, kolor główny **#760039** (burgund), akcent **#108474** (turkus), białe tło,

@@ -25,7 +25,10 @@ porównywalne i stanowią drugi (obok embeddingu wizualnego) „punkt zaczepieni
 - **meble tapicerowane:** `sofa, naroznik, fotel` → subtype np. `3-osobowa`, `rozkladana`, `z_szezlongiem`.
 - **inne meble:** `krzeslo, stol, stolik, lozko, szafka, komoda, regal` → subtype np. `rozkladany`, `barowe`.
 - **oswietlenie** → subtype: `wiszaca, kinkiet, plafon, stolowa, podlogowa, reflektor_szynowy, downlight, zyrandol, listwa_liniowa, system_magnetyczny`.
-- **plytki, dywan, dekoracja, inne** → subtype wg sensu (np. płytki: `scienne/podlogowe`, format).
+- **mebel** (ogólne, gdy nie da się doprecyzować), **lustro**.
+- **wykończenie/łazienka (oferta maxfliz):** `plytki` (subtype: `scienne/podlogowe`, format), `podlogi` (panele/deska),
+  `lazienka` (umywalki/baterie/prysznice/wanny/armatura), `drzwi`, `sztukateria` (listwy/rozety/profile), `tapety` (fototapety/dekoracje ścienne).
+- **dywan, dekoracja, inne** → subtype wg sensu.
 
 ## Schemat JSON
 
@@ -60,8 +63,8 @@ porównywalne i stanowią drugi (obok embeddingu wizualnego) „punkt zaczepieni
 ```
 Jesteś ekspertem od opisu wizualnego mebli i produktów wnętrzarskich (meble, oświetlenie, płytki,
 dywany…). Na podstawie zdjęcia opisz produkt WYŁĄCZNIE tym, co widać. NAJPIERW ustal `kategoria`
-(kanoniczny slug: sofa, naroznik, fotel, krzeslo, stol, stolik, lozko, szafka, komoda, regal,
-oswietlenie, plytki, dywan, dekoracja, inne) oraz `subtype` (generyczny podtyp w obrębie kategorii,
+(kanoniczny slug: sofa, naroznik, fotel, krzeslo, stol, stolik, lozko, szafka, komoda, regal, mebel,
+oswietlenie, plytki, podlogi, lazienka, drzwi, tapety, sztukateria, lustro, dywan, dekoracja, inne) oraz `subtype` (generyczny podtyp w obrębie kategorii,
 np. dla oświetlenia: wiszaca/kinkiet/plafon/stolowa/podlogowa/reflektor_szynowy/downlight/zyrandol).
 Zwróć wyłącznie poprawny JSON wg schematu:
 {kategoria, subtype, typ, ksztalt_ogolny, material, kolor_dominujacy, kolory_dodatkowe[],
