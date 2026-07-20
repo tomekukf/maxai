@@ -97,6 +97,7 @@ export default function SearchPage() {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set()); // wykryte produkty zaznaczone do batcha
+  const [cropByItem, setCropByItem] = useState<Map<number, PixelCrop>>(new Map()); // zapamiętany (przesunięty) kadr per produkt
   const [groups, setGroups] = useState<SearchGroup[]>([]); // wyniki: 1 grupa = 1 produkt
   const [manualHint, setManualHint] = useState(''); // „czego szukasz?" dla ręcznego kadru
   // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
@@ -120,6 +121,7 @@ export default function SearchPage() {
     setCrop(undefined);
     setCompletedCrop(null);
     setSelected(new Set());
+    setCropByItem(new Map());
     setGroups([]);
     setManualHint('');
     setMsg(null);
@@ -196,16 +198,25 @@ export default function SearchPage() {
     }
   }
 
-  // Wczytaj ramkę wykrytego produktu do edytowalnego (ruchomego) kadru. Nakładkę tego produktu chowamy.
+  // Wczytaj ramkę produktu do ruchomego kadru: jeśli był już PRZESUNIĘTY, użyj zapamiętanego; inaczej box z detekcji.
   function loadIntoCrop(i: number) {
     const image = imgRef.current;
     if (!image) return;
     const b = items[i].box;
-    const c: PixelCrop = { unit: 'px', x: b.x * image.width, y: b.y * image.height, width: b.w * image.width, height: b.h * image.height };
+    const saved = cropByItem.get(i);
+    const c: PixelCrop = saved ?? { unit: 'px', x: b.x * image.width, y: b.y * image.height, width: b.w * image.width, height: b.h * image.height };
     setActiveItem(i);
     setManualHint(items[i].label); // podpowiedź prefill z etykiety detekcji
     setCrop(c);
     setCompletedCrop(c);
+  }
+
+  // Zakończenie edycji kadru → zapamiętaj dla aktywnego produktu (żeby przesunięcie przetrwało odznaczenie/przełączenie).
+  function onCropComplete(c: PixelCrop) {
+    setCompletedCrop(c);
+    if (activeItem != null && c.width >= 5 && c.height >= 5) {
+      setCropByItem((m) => new Map(m).set(activeItem, c));
+    }
   }
 
   function clearCrop() {
@@ -234,13 +245,13 @@ export default function SearchPage() {
     }
     setMsg(null);
     const idxs = [...selected].sort((a, b) => a - b);
-    const useMoved = activeItem != null && completedCrop != null && completedCrop.width >= 5 && completedCrop.height >= 5;
     const sx = image.naturalWidth / image.width;
     const sy = image.naturalHeight / image.height;
     const newGroups: SearchGroup[] = idxs.map((i, n) => {
-      // Dla przesuniętego (aktywnego) produktu użyj ruchomego kadru; dla reszty automatycznej ramki detekcji.
-      const b64 = (i === activeItem && useMoved && completedCrop)
-        ? cropToBase64(image, completedCrop.x * sx, completedCrop.y * sy, completedCrop.width * sx, completedCrop.height * sy)
+      // Zapamiętany (przesunięty) kadr produktu, a jeśli go nie ruszano — automatyczna ramka detekcji.
+      const saved = cropByItem.get(i);
+      const b64 = saved
+        ? cropToBase64(image, saved.x * sx, saved.y * sy, saved.width * sx, saved.height * sy)
         : cropBox(image, items[i].box);
       return {
         key: `d${i}`,
@@ -415,7 +426,7 @@ export default function SearchPage() {
 
             {/* obraz z edytowalnym kadrem + nakładka numerowanych ramek */}
             <div className="relative inline-block border bg-white">
-              <ReactCrop crop={crop} onChange={(c) => setCrop(c)} onComplete={(c) => setCompletedCrop(c)}>
+              <ReactCrop crop={crop} onChange={(c) => setCrop(c)} onComplete={(c) => onCropComplete(c)}>
                 <img
                   ref={imgRef}
                   src={pageImg}
