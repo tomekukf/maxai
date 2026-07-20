@@ -64,6 +64,23 @@ function cropToBase64(
   return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
+// Wyniki jednego wyszukiwania (jeden produkt). Kilka grup = kilka list obok siebie.
+type SearchGroup = {
+  key: string;
+  label: string;
+  b64: string;
+  queryImg: string;
+  queryCategory: string | null;
+  queryAttrs: Record<string, unknown> | null;
+  results: SearchResult[];
+  busy: boolean;
+  loadingMore: boolean;
+  error: string | null;
+};
+
+const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+const numBadge = (n: number) => CIRCLED[n - 1] ?? `(${n})`;
+
 export default function SearchPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [numPages, setNumPages] = useState(0);
@@ -78,21 +95,16 @@ export default function SearchPage() {
 
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
-  const [results, setResults] = useState<SearchResult[] | null>(null);
-  const [queryAttrs, setQueryAttrs] = useState<Record<string, unknown> | null>(null);
-  const [queryCategory, setQueryCategory] = useState<string | null>(null);
-  const [queryImg, setQueryImg] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set()); // wykryte produkty zaznaczone do batcha
+  const [groups, setGroups] = useState<SearchGroup[]>([]); // wyniki: 1 grupa = 1 produkt
   // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
   const [admin] = useState(() => isAdmin(loadSession()));
   const [diag, setDiag] = useState(false);
 
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const hiddenRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
-  const lastB64 = useRef<string | null>(null);
 
   // Kategorie obecne w bazie — do filtrowania podpowiedzi detekcji (nie proponuj czego nie mamy).
   useEffect(() => {
@@ -105,11 +117,8 @@ export default function SearchPage() {
     setActiveItem(null);
     setCrop(undefined);
     setCompletedCrop(null);
-    setResults(null);
-    setQueryAttrs(null);
-    setQueryCategory(null);
-    setQueryImg(null);
-    lastB64.current = null;
+    setSelected(new Set());
+    setGroups([]);
     setMsg(null);
   }
 
@@ -168,67 +177,103 @@ export default function SearchPage() {
     runDetect();
   }
 
-  // Klik w podpowiedź → ustaw wstępną ramkę (na wymiarach wyświetlanego obrazu)
-  function pickDetected(i: number) {
+  // Zaznacz/odznacz wykryty produkt do wyszukiwania wsadowego.
+  function toggleSelect(i: number) {
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(i) ? n.delete(i) : n.add(i);
+      return n;
+    });
+  }
+
+  // „Popraw kadr" — wczytaj ramkę wykrytego produktu do edytowalnego kadru (precyzyjny, pojedynczy przypadek).
+  function loadIntoCrop(i: number) {
     const image = imgRef.current;
     if (!image) return;
     const b = items[i].box;
-    const c: PixelCrop = {
-      unit: 'px',
-      x: b.x * image.width,
-      y: b.y * image.height,
-      width: b.w * image.width,
-      height: b.h * image.height,
-    };
+    const c: PixelCrop = { unit: 'px', x: b.x * image.width, y: b.y * image.height, width: b.w * image.width, height: b.h * image.height };
     setActiveItem(i);
     setCrop(c);
     setCompletedCrop(c);
   }
 
-  async function handleSearch() {
+  // Wycinek base64 z boxa znormalizowanego (0-1) — w rozdzielczości oryginału.
+  function cropBox(image: HTMLImageElement, b: { x: number; y: number; w: number; h: number }): string | null {
+    return cropToBase64(image, b.x * image.naturalWidth, b.y * image.naturalHeight, b.w * image.naturalWidth, b.h * image.naturalHeight);
+  }
+
+  // Batch: dla każdego zaznaczonego produktu osobne wyszukiwanie → osobna lista wyników.
+  async function searchSelected() {
+    const image = imgRef.current;
+    if (!image || selected.size === 0) {
+      setMsg('Zaznacz co najmniej jeden wykryty produkt.');
+      return;
+    }
+    setMsg(null);
+    const idxs = [...selected].sort((a, b) => a - b);
+    const newGroups: SearchGroup[] = idxs.map((i, n) => {
+      const b64 = cropBox(image, items[i].box);
+      return {
+        key: `d${i}`,
+        label: `${numBadge(n + 1)} ${items[i].label}`,
+        b64: b64 ?? '',
+        queryImg: b64 ? 'data:image/jpeg;base64,' + b64 : '',
+        queryCategory: null, queryAttrs: null, results: [],
+        busy: !!b64, loadingMore: false, error: b64 ? null : 'Wycinek za mały.',
+      };
+    });
+    setGroups(newGroups);
+    await Promise.all(newGroups.map((g, gi) => (g.b64 ? runGroupSearch(gi, g.b64, 3) : Promise.resolve())));
+  }
+
+  // Ręczny kadr → pojedyncza grupa wyników.
+  async function searchManualCrop() {
     const image = imgRef.current;
     if (!image || !completedCrop || completedCrop.width < 5 || completedCrop.height < 5) {
-      setMsg('Zaznacz mebel na obrazie (lub wybierz podpowiedź i popraw ramkę).');
+      setMsg('Zaznacz fragment ręcznie na obrazie.');
       return;
     }
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
-    const b64 = cropToBase64(
-      image,
-      completedCrop.x * scaleX,
-      completedCrop.y * scaleY,
-      completedCrop.width * scaleX,
-      completedCrop.height * scaleY,
-    );
+    const b64 = cropToBase64(image, completedCrop.x * scaleX, completedCrop.y * scaleY, completedCrop.width * scaleX, completedCrop.height * scaleY);
     if (!b64) {
       setMsg('Zaznaczenie za małe.');
       return;
     }
-    lastB64.current = b64;
-    setQueryImg('data:image/jpeg;base64,' + b64);
-    await runSearch(b64, 3, false);
+    setMsg(null);
+    setGroups([{
+      key: 'manual', label: 'Ręczny wybór', b64,
+      queryImg: 'data:image/jpeg;base64,' + b64,
+      queryCategory: null, queryAttrs: null, results: [], busy: true, loadingMore: false, error: null,
+    }]);
+    await runGroupSearch(0, b64, 3);
   }
 
-  async function runSearch(b64: string, k: number, more: boolean) {
-    (more ? setLoadingMore : setBusy)(true);
-    setMsg(null);
+  async function runGroupSearch(gi: number, b64: string, k: number) {
+    setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: true, error: null } : g)));
     try {
       const res = await searchByImage(b64, k);
-      setResults(res.results);
-      setQueryAttrs(res.queryAttributes ?? null);
-      setQueryCategory(res.queryCategory ?? null);
-      if (!res.results.length) setMsg('Brak dobrego dopasowania w bazie (nic wystarczająco podobnego).');
+      setGroups((gs) => gs.map((g, i) => (i === gi
+        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
+        : g)));
     } catch (e) {
-      setMsg(`Błąd wyszukiwania: ${(e as Error).message}`);
-    } finally {
-      (more ? setLoadingMore : setBusy)(false);
+      setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: false, error: (e as Error).message } : g)));
     }
   }
 
-  async function loadMore() {
-    if (!lastB64.current || !results) return;
-    await runSearch(lastB64.current, results.length + 3, true);
+  async function loadMoreGroup(gi: number) {
+    const g = groups[gi];
+    if (!g || !g.b64) return;
+    setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: true } : x)));
+    try {
+      const res = await searchByImage(g.b64, g.results.length + 3);
+      setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, results: res.results, loadingMore: false } : x)));
+    } catch (e) {
+      setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: false, error: (e as Error).message } : x)));
+    }
   }
+
+  const anyBusy = groups.some((g) => g.busy);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -295,7 +340,7 @@ export default function SearchPage() {
 
         {pageImg && (
           <>
-            {/* podpowiedzi wykrytych mebli */}
+            {/* podpowiedzi wykrytych produktów — numerowane, wielokrotny wybór */}
             <div className="space-y-1">
               <div className="text-sm font-medium">
                 Wykryte produkty {detecting && <span className="text-slate-400">(analizuję…)</span>}
@@ -306,29 +351,47 @@ export default function SearchPage() {
                 )}
               </div>
               {items.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {items.map((it, i) => (
-                    <button
+                    <span
                       key={i}
-                      onClick={() => pickDetected(i)}
                       className={
-                        activeItem === i
-                          ? 'rounded-full bg-slate-900 px-3 py-1 text-xs text-white'
-                          : 'rounded-full border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100'
+                        'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ' +
+                        (selected.has(i) ? 'border-brand bg-brand text-white' : 'border-slate-300 hover:bg-slate-100') +
+                        (activeItem === i ? ' ring-2 ring-accent' : '')
                       }
                     >
-                      {it.label}
-                    </button>
+                      <button onClick={() => toggleSelect(i)} className="flex items-center gap-1" title="Zaznacz do wyszukania">
+                        <span className="font-semibold">{numBadge(i + 1)}</span>
+                        {it.label}
+                      </button>
+                      <button
+                        onClick={() => loadIntoCrop(i)}
+                        title="Wczytaj ramkę do ręcznej korekty"
+                        className={'ml-1 rounded px-1 ' + (selected.has(i) ? 'text-white/80 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200')}
+                      >
+                        ✎
+                      </button>
+                    </span>
                   ))}
+                  {items.length > 1 && (
+                    <button
+                      onClick={() => setSelected((s) => (s.size === items.length ? new Set() : new Set(items.map((_, i) => i))))}
+                      className="text-xs text-blue-700 hover:underline"
+                    >
+                      {selected.size === items.length ? 'Odznacz wszystkie' : 'Zaznacz wszystkie'}
+                    </button>
+                  )}
                 </div>
               )}
               <p className="text-xs text-slate-500">
-                Kliknij mebel → pojawi się ramka do poprawienia. Potem „Znajdź podobne".
+                Zaznacz jeden lub więcej produktów i użyj „Szukaj zaznaczonych" — dostaniesz osobną listę dla każdego.
+                Ikoną ✎ wczytasz ramkę do ręcznej korekty.
               </p>
             </div>
 
-            {/* obraz z edytowalnym kadrem */}
-            <div className="inline-block border bg-white">
+            {/* obraz z edytowalnym kadrem + nakładka numerowanych ramek */}
+            <div className="relative inline-block border bg-white">
               <ReactCrop crop={crop} onChange={(c) => setCrop(c)} onComplete={(c) => setCompletedCrop(c)}>
                 <img
                   ref={imgRef}
@@ -338,43 +401,107 @@ export default function SearchPage() {
                   style={{ maxWidth: DISPLAY_MAX, display: 'block' }}
                 />
               </ReactCrop>
+              <div className="pointer-events-none absolute inset-0">
+                {items.map((it, i) => (
+                  <div
+                    key={i}
+                    className={'absolute border-2 ' + (selected.has(i) ? 'border-brand' : 'border-white/70')}
+                    style={{ left: `${it.box.x * 100}%`, top: `${it.box.y * 100}%`, width: `${it.box.w * 100}%`, height: `${it.box.h * 100}%` }}
+                  >
+                    <button
+                      onClick={() => toggleSelect(i)}
+                      className={
+                        'pointer-events-auto absolute -left-1 -top-3 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold shadow ' +
+                        (selected.has(i) ? 'bg-brand text-white' : 'bg-white text-slate-700')
+                      }
+                      title="Zaznacz do wyszukania"
+                    >
+                      {i + 1}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button onClick={handleSearch} disabled={busy} className={btnPrimary}>
-                {busy ? 'Szukam…' : 'Znajdź podobne'}
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={searchSelected} disabled={anyBusy || selected.size === 0} className={btnPrimary}>
+                {anyBusy ? 'Szukam…' : `Szukaj zaznaczonych${selected.size ? ` (${selected.size})` : ''}`}
+              </button>
+              <button onClick={searchManualCrop} disabled={anyBusy || !completedCrop} className={navBtn}>
+                Szukaj ręcznego kadru
               </button>
               {msg && <span className="text-sm text-red-700">{msg}</span>}
             </div>
           </>
         )}
 
-        {results && results.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <h3 className="font-medium">Propozycje ({groupResults(results).length})</h3>
-              {admin && (
-                <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
-                  {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
-                </button>
-              )}
-            </div>
-            {admin && diag && (
-              <DiagPanel queryImg={queryImg} category={queryCategory} attrs={queryAttrs} results={results} />
-            )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {groupResults(results).map((g, i) => (
-                <ResultCard key={i} r={g.rep} rank={i + 1} queryAttrs={queryAttrs} variants={g.variants} />
-              ))}
-            </div>
-            <div className="pt-1">
-              <button onClick={loadMore} disabled={loadingMore} className={navBtn}>
-                {loadingMore ? 'Wczytuję…' : 'Wczytaj kolejne'}
-              </button>
-            </div>
+        {/* Wyniki — osobna sekcja na każdy produkt */}
+        {groups.length > 0 && (
+          <div className="space-y-6">
+            {groups.length > 1 || admin ? (
+              <div className="flex items-center gap-3">
+                <h3 className="font-medium">Wyniki dla {groups.length} {groups.length === 1 ? 'produktu' : 'produktów'}</h3>
+                {admin && (
+                  <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
+                    {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
+                  </button>
+                )}
+              </div>
+            ) : null}
+            {groups.map((g, gi) => (
+              <GroupSection
+                key={g.key}
+                g={g}
+                admin={admin}
+                diag={diag}
+                onLoadMore={() => loadMoreGroup(gi)}
+              />
+            ))}
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// Sekcja wyników jednego produktu (nagłówek + miniatura zapytania + karty + „wczytaj kolejne").
+function GroupSection({
+  g, admin, diag, onLoadMore,
+}: {
+  g: SearchGroup; admin: boolean; diag: boolean; onLoadMore: () => void;
+}) {
+  const grouped = groupResults(g.results);
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+      <div className="flex items-center gap-3">
+        {g.queryImg && <img src={g.queryImg} alt="" className="h-12 w-12 rounded border bg-white object-contain" />}
+        <div>
+          <div className="text-sm font-medium">{g.label}</div>
+          <div className="text-xs text-slate-500">
+            {g.busy ? 'Szukam…' : g.queryCategory ? `kategoria: ${g.queryCategory} · ${grouped.length} propozycji` : `${grouped.length} propozycji`}
+          </div>
+        </div>
+      </div>
+
+      {g.error && <div className="text-sm text-red-700">{g.error}</div>}
+      {admin && diag && !g.busy && g.results.length > 0 && (
+        <DiagPanel queryImg={g.queryImg || null} category={g.queryCategory} attrs={g.queryAttrs} results={g.results} />
+      )}
+
+      {grouped.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {grouped.map((gr, i) => (
+              <ResultCard key={i} r={gr.rep} rank={i + 1} queryAttrs={g.queryAttrs} variants={gr.variants} />
+            ))}
+          </div>
+          <div className="pt-1">
+            <button onClick={onLoadMore} disabled={g.loadingMore} className={navBtn}>
+              {g.loadingMore ? 'Wczytuję…' : 'Wczytaj kolejne'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
