@@ -66,15 +66,32 @@ function categoryOf(vendor, title) {
 
 const PREFIX_SUB = { P: 'wiszaca', W: 'kinkiet', C: 'plafon', T: 'stolowa', F: 'podlogowa', S: 'reflektor_szynowy', H: 'downlight' };
 function subtypeOf(cat, title, code) {
-  if (cat !== 'oswietlenie') return null;
   const t = (title || '').toLowerCase();
-  if (/wisząc|wiszac/.test(t)) return 'wiszaca';
-  if (/kinkiet/.test(t)) return 'kinkiet';
-  if (/plafon|sufitow/.test(t)) return 'plafon';
-  if (/podłogow|podlogow/.test(t)) return 'podlogowa';
-  if (/stołow|stolow|biurkow/.test(t)) return 'stolowa';
-  if (/żyrandol|zyrandol/.test(t)) return 'zyrandol';
-  return code ? PREFIX_SUB[code[0]] ?? null : null; // fallback: prefiks kodu (Maxlight)
+  if (cat === 'oswietlenie') {
+    if (/wisząc|wiszac/.test(t)) return 'wiszaca';
+    if (/kinkiet/.test(t)) return 'kinkiet';
+    if (/plafon|sufitow/.test(t)) return 'plafon';
+    if (/podłogow|podlogow/.test(t)) return 'podlogowa';
+    if (/stołow|stolow|biurkow/.test(t)) return 'stolowa';
+    if (/żyrandol|zyrandol/.test(t)) return 'zyrandol';
+    return code ? PREFIX_SUB[code[0]] ?? null : null; // fallback: prefiks kodu (Maxlight)
+  }
+  if (cat === 'lazienka') {
+    if (/wanna.*wolnostoj|wolnostoj.*wann/.test(t)) return 'wanna_wolnostojaca';
+    if (/wanna/.test(t)) return 'wanna';
+    if (/umywalk/.test(t)) return 'umywalka';
+    if (/bateri/.test(t)) return 'bateria';
+    if (/kabina|kabiny/.test(t)) return 'kabina';
+    if (/deszczownic|prysznic|natrysk/.test(t)) return 'prysznic';
+    if (/bidet/.test(t)) return 'bidet';
+    if (/\bwc\b|misk|deska/.test(t)) return 'wc';
+    return null;
+  }
+  if (cat === 'plytki') {
+    const m = t.match(/(\d{2,3})\s?[x×]\s?(\d{2,3})/);
+    return m ? `${m[1]}x${m[2]}` : null;
+  }
+  return null;
 }
 
 async function main() {
