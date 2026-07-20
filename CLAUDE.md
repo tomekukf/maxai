@@ -36,7 +36,7 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   - Multi-image: tabela `product_images` (embedding + `attributes` JSONB per zdjęcie). Migracje `002`/`003`.
   - Opis wizualny (Sonnet 4.5) każdego zdjęcia wg `docs/product-description-spec.md`, z nazwą jako kontekstem (kotwiczy typ).
   - Auto-detekcja `/detect` (Haiku 4.5 vision) — etykiety + boxy.
-  - **Retrieve → rerank:** `/search` = Titan TOP-8 → opis wycinka zapytania (Sonnet 4.5) → rerank sędziowski na zdjęciach+atrybutach z **oceną dopasowania 0-100** (nacisk kolor+materiał+bryła). Wyświetlane „dopasowanie %" = ocena rerankingu.
+  - **Retrieve → rerank:** `/search` = Titan TOP-N → opis wycinka zapytania (Sonnet 4.5) → rerank sędziowski na wszystkich zdjęciach+atrybutach+specyfikacji z **oceną dopasowania 0-100**. **Waga (od Fazy 8): kształt/bryła/proporcje/konstrukcja + opis wizualny są GŁÓWNE; kolor/materiał DRUGORZĘDNE** (warianty tego samego produktu). Wyświetlane „dopasowanie %" = ocena rerankingu.
   - Gotcha: obrazy BRW to PNG mimo `.jpg` → `_img_format` (magic-bytes) w describe/rerank/detect.
 - 🟡 Krok 2.5 — test pozytywny **zaliczony**: BRW-718047 (beżowa amerykanka) z wizualizacji → **#1** po rerankingu (mimo niższego kosinusa niż szare sofy). ⏳ Zostaje test alternatywny (produkt spoza bazy).
 - 📐 **Faza 5 — Import katalogu PDF producenta (zaprojektowana, do implementacji).** Wciąganie

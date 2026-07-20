@@ -184,6 +184,9 @@ def _rerank(query_bytes, cands, query_attrs=None):
             {"text": f"Atrybuty ZAPYTANIA (opis wizualny): {q_attrs}"},
         ]
         imgs = 0
+        # Limit obrazów Sonnet ~20/żądanie (łącznie z obrazem zapytania). Budżet dzielimy na kandydatów,
+        # żeby przy większym recall NIE przekroczyć limitu (inaczej wyjątek → fallback bez oceny).
+        per_cand = max(1, min(4, 18 // max(1, len(cands))))
         for i, c in enumerate(cands):
             attrs = json.dumps(c.get("attributes") or {}, ensure_ascii=False)[:400]
             params = json.dumps(c.get("params") or {}, ensure_ascii=False)[:400]
@@ -192,8 +195,8 @@ def _rerank(query_bytes, cands, query_attrs=None):
                 "text": f"Kandydat {i}: {c.get('name') or ''} (podtyp: {c.get('subtype') or '?'}). "
                         f"Opis: {attrs}. Parametry/specyfikacja: {params}"
             })
-            # Wszystkie dostępne zdjęcia kandydata (nie tylko najlepsze) — do ~4.
-            for url in (c.get("image_urls") or [c.get("image_s3_url")])[:4]:
+            # Zdjęcia kandydata (wiele ujęć, w ramach budżetu obrazów).
+            for url in (c.get("image_urls") or [c.get("image_s3_url")])[:per_cand]:
                 b = _get_s3_bytes(url) if url else None
                 if b:
                     content.append({"image": {"format": _img_format(b), "source": {"bytes": b}}})
@@ -202,17 +205,18 @@ def _rerank(query_bytes, cands, query_attrs=None):
             {
                 "text": (
                     "Oceń każdego kandydata jako STOPIEŃ DOPASOWANIA do ZAPYTANIA w skali 0-100 "
-                    "(100 = niemal ten sam produkt; 0 = zupełnie inny mebel). Każdy kandydat może mieć KILKA zdjęć "
+                    "(100 = ten sam / bliźniaczy produkt; 0 = zupełnie inny). Każdy kandydat może mieć KILKA zdjęć "
                     "(różne ujęcia/warianty) — oceniaj po całości. "
-                    "Zwróć szczególną uwagę na KOLOR i MATERIAŁ oraz ogólny kształt/bryłę — te cechy mogą wskazać "
-                    "DOKŁADNIE ten sam produkt (np. beżowy vs szary to różne modele). "
-                    "Kandydaci mogą mieć PARAMETRY/specyfikację (np. moc W, barwa K, IP, kąt °, źródło światła, "
-                    "kolory, materiał, wymiary) — uwzględnij je, gdy pomagają rozróżnić lub potwierdzić produkt. "
-                    "Nie przeceniaj samej wielkości ani tła renderu. "
-                    "POMIŃ kandydatów będących zupełnie innym typem/kategorią lub wyraźnie niepodobnych kolorem i "
-                    "materiałem (nie umieszczaj ich w wynikach). "
+                    "NAJWAŻNIEJSZE (decyduje o ocenie): BRYŁA, KSZTAŁT, PROPORCJE, SYLWETKA, KONSTRUKCJA/DETALE i typ — "
+                    "to one wskazują ten sam model. Duży nacisk na zgodność opisu wizualnego (kształt/forma). "
+                    "KOLOR i MATERIAŁ traktuj jako DRUGORZĘDNE: ten sam produkt często występuje w różnych kolorach/"
+                    "tkaninach/wykończeniach (warianty), więc RÓŻNICA koloru lub materiału NIE obniża mocno oceny, "
+                    "jeśli bryła i kształt się zgadzają. Nie odrzucaj dobrego dopasowania kształtem tylko z powodu koloru. "
+                    "Kandydaci mogą mieć PARAMETRY/specyfikację (moc W, barwa K, IP, kąt °, źródło światła, wymiary) — "
+                    "użyj ich pomocniczo do potwierdzenia/rozróżnienia. Nie przeceniaj samej wielkości ani tła renderu. "
+                    "POMIŃ tylko kandydatów o wyraźnie innej bryle/kształcie lub innym typie (nie umieszczaj ich w wynikach). "
                     "Dla każdego kandydata podaj też 'powod' — krótkie (do ~14 słów) uzasadnienie oceny "
-                    "(co pasuje / co odróżnia: kolor, materiał, kształt, typ, ew. parametr). "
+                    "(przede wszystkim: kształt/bryła/typ; kolor/materiał tylko wtórnie). "
                     'Zwróć WYŁĄCZNIE JSON posortowany od najlepszego: '
                     '{"wyniki":[{"i":<indeks>,"dopasowanie":<0-100>,"powod":"..."}], "uzasadnienie":"1 zdanie"}. '
                     "Bez markdown."
@@ -276,7 +280,7 @@ def lambda_handler(event, _ctx):
         return _resp(400, {"error": "Nieprawidłowy base64"})
 
     top_k = max(1, min(int(body.get("topK", 3)), 20))
-    recall_k = max(top_k, int(body.get("recallK", 8)))  # ile kandydatów do rerankingu
+    recall_k = max(top_k, int(body.get("recallK", 8)))  # kandydaci do rerankingu (budżet obrazów dzielony na nich)
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
 

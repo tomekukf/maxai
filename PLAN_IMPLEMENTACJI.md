@@ -21,6 +21,7 @@
 | IaC | **AWS CDK (TypeScript)** | Kod w `infra/`. Node 22 pewne; Lambdy w Pythonie z runtime `python3.13` (lokalny Python 3.14 jest za nowy dla Lambdy). |
 | Zasilanie danymi | **BRW (JSON-LD, ~25 sof)**, ID `BRW-<kod>` | Agata za Cloudflare → pivot na BRW. Brak dostępu do Optimy klienta. |
 | Wizualizacje testowe | **Dostarcza użytkownik (2 PDF-y)** | Patrz sekcja D. Fallback: kompozycja realnych zdjęć. |
+| **Waga dopasowania: kształt > kolor** ✅ (od Fazy 8) | Rerank przeważony: **bryła/kształt/proporcje/konstrukcja + opis wizualny = główne**, kolor/materiał = drugorzędne | Ten sam produkt bywa w wielu kolorach/tkaninach/wykończeniach (warianty) — kolor jako główny sygnał zaniżał trafność. Różnica koloru nie obniża mocno oceny przy zgodnej bryle. Uwaga: retrieve (Titan) jest czuły na kolor → większy `recallK` (12), by warianty docierały do reranku. |
 | **Tworzenie kolekcji = LOKALNIE** ✅ | Analiza katalogów (ekstrakcja, klasyfikacja, opis) **lokalnie** (Claude Code / model lokalny), NIE na Bedrock vision | Ograniczenie kosztów Bedrock. Na AWS pozostają wyłącznie: (a) **analiza dokumentu przy wyszukiwaniu** (opis wycinka + rerank), (b) **embeddingi Titan** (jedyny model bez lokalnego odpowiednika; tani; liczony raz przy imporcie, potem **eksportowany** → re-import bez Bedrock). Interaktywny import z vision na AWS (`/catalog/analyze-page`, Krok 5.2/5.5) odłożony na rzecz ścieżki lokalnej + import/eksport (Krok 7.5). Zrobione dla Maxlight (`extract-maxlight.py` + `seed-maxlight.mjs`). |
 
 ---
@@ -113,10 +114,12 @@ Surowy kosinus Titana na parach *render z wizualizacji ↔ zdjęcie studyjne* by
    per produkt → **TOP-8** kandydatów (recall), z ich `attributes`.
 2. **Opis zapytania (Sonnet 4.5):** wycinek zapytania jest opisywany tym samym schematem co produkty
    (drugi sygnał: typ/kolor/materiał/kształt).
-3. **Rerank (Sonnet 4.5 jako sędzia):** na wejściu obraz zapytania + jego atrybuty + obrazy i atrybuty
-   kandydatów. Model **ocenia dopasowanie 0-100** per kandydat, odrzuca inny typ mebla / wyraźnie
-   niepodobne kolorem i materiałem, zwraca ranking. Nacisk na **kolor + materiał + bryłę** (rozróżniają
-   ten sam vs inny model), z niedowartościowaniem samej wielkości i tła renderu.
+3. **Rerank (Sonnet 4.5 jako sędzia):** na wejściu obraz zapytania + jego atrybuty + obrazy, atrybuty
+   i **specyfikacje** kandydatów (wszystkie zdjęcia). Model **ocenia dopasowanie 0-100** per kandydat i zwraca ranking.
+   **Waga (od Fazy 8, zmiana):** decydują **BRYŁA, KSZTAŁT, PROPORCJE, KONSTRUKCJA i typ + opis wizualny**;
+   **KOLOR i MATERIAŁ są DRUGORZĘDNE** (ten sam produkt bywa w wielu kolorach/tkaninach — różnica koloru NIE
+   obniża mocno oceny przy zgodnej bryle). Odrzucani tylko kandydaci o wyraźnie innej bryle/kształcie lub typie;
+   niedowartościowanie samej wielkości i tła renderu. Specyfikacja (moc/barwa/IP/kąt…) — sygnał pomocniczy.
 4. **Wynik:** wyświetlana „**dopasowanie %**" = ocena rerankingu (spójna z kolejnością);
    `visualSimilarity` (kosinus Titana) trzymany pomocniczo.
 
