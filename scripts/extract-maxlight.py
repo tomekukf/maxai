@@ -80,6 +80,36 @@ def field(text, key):
     return m.group(1).strip() if m else None
 
 
+COLOR_WORDS = ("BLACK", "WHITE", "GOLD", "BRASS", "CHROME", "SILVER", "GREY", "GRAY", "BROWN", "NICKEL", "COPPER")
+
+
+def specs(text):
+    """Generyczny parser specyfikacji oświetleniowych (spójny format w katalogu)."""
+    s = {}
+    m = re.search(r"\b(\d+(?:[.,]\d+)?)\s*W\b", text)
+    if m:
+        s["power_w"] = m.group(1).replace(",", ".")
+    m = re.search(r"\b(\d+)\s*lm\b", text)
+    if m:
+        s["lumens"] = m.group(1)
+    m = re.search(r"\b(\d{4})\s*K\b", text)
+    if m:
+        s["cct_k"] = m.group(1)
+    m = re.search(r"\b(IP\d{2})\b", text)
+    if m:
+        s["ip"] = m.group(1)
+    m = re.search(r"\b(\d{1,3})\s*°", text)
+    if m:
+        s["beam_deg"] = m.group(1)
+    m = re.search(r"\b(\d{2,3})\s*V\b", text)
+    if m:
+        s["voltage_v"] = m.group(1)
+    colors = re.findall(r"\b(" + "|".join(COLOR_WORDS) + r")\b", text)
+    if colors:
+        s["colors"] = sorted({c.lower() for c in colors})
+    return s or None
+
+
 def dimensions(text):
     """Tylko pewne wymiary: srednica (Ø) i wartosci z jednostka cm/mm.
     NIE lapiemy golych 'W123' itp. bo to koliduje z kodami produktow (W0373)."""
@@ -152,6 +182,7 @@ def main():
             "finish": field(text, "finish"),
             "material": field(text, "material"),
             "dimensions": dimensions(text),
+            "specs": specs(text),
             "images": saved,
             "category": "oswietlenie",
             "subtype": subtype_of(codes),   # deterministycznie z prefiksu kodu

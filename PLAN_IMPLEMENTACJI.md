@@ -562,6 +562,49 @@ administracji rozwiązaniem + statystyki).
   `docs/admin-runbook.md` (render w panelu Dokumentacja). Bootstrap przetestowany na Maxlight.
 - ⏳ Do potwierdzenia: pełny onboarding nowego (innego) katalogu end-to-end.
 
+### Faza 8 — Jakość danych v1 (specyfikacje, opisy wizualne, wyszukiwanie wielozdjęciowe, edycja)
+
+**Cel:** żeby przy wyszukiwaniu dostępny był **pełny kontekst produktu** (specyfikacja techniczna + opis wizualny),
+wykorzystywany przez LLM wyszukujący; oraz żeby dane te dało się podejrzeć i edytować w panelu admina.
+
+**Analiza stanu (pomiary):** 0/891 zdjęć ma opis wizualny (`attributes`); 51/287 produktów bez żadnej
+specyfikacji; format tabeli technicznej (np. `7W 230V 572lm 3000K IP20 35°`) nie był parsowany; rerank
+i opis zapytania **nie widzą `params`**; rerank ocenia kandydata tylko na **jednym** (najlepszym) zdjęciu.
+Formaty specyfikacji spójne w katalogu: `W` (moc), `lm`, `K` (barwa), `IP`, `°` (kąt), `V` + kolory.
+
+**Krok 8.1 — Ekstraktor: generyczny parser specyfikacji** — ✅ ZROBIONE
+- Parser tokenów oświetleniowych: `power_w, voltage_v, lumens, cct_k, cri, ip, beam_deg` + `colors[]`; scala z
+  istniejącym `finish/material` (bilingwalny). Zapis do `params.specs`. Re-ekstrakcja Maxlight.
+- ✅ Weryfikacja: TRIAC/C0155 → `params.specs` z 7W/572lm/3000K/IP20/35°/230V + kolory; spadek liczby braków.
+
+**Krok 8.2 — Aktualizacja bazy o specyfikacje** — ✅ ZROBIONE (285/287; `update-maxlight-specs.mjs`)
+- Skrypt (bezpośrednio DB, bez re-embed): scala `params.specs` do istniejących produktów po `manufacturer_code`.
+- ✅ Weryfikacja: liczba produktów bez specyfikacji znacząco spada; embeddingi nietknięte.
+
+**Krok 8.3 — LLM wyszukujący widzi specyfikacje + bogatszy wynik** — ✅ ZROBIONE (wdrożone)
+- `/search`: rerank i opis zapytania dostają `params`/`specs` kandydatów w kontekście; **prompt (generyczny)
+  zaktualizowany**, że mogą występować dane techniczne (moc, barwa, IP, kąt, kolory) i należy je uwzględniać.
+- Wynik `/search` zwraca dodatkowo `subtype`, `id`, pełne `params` (dla karty/analizy).
+- ✅ Weryfikacja: w odpowiedzi widać specyfikacje kandydatów; rerank może się nimi kierować.
+
+**Krok 8.4 — Wyszukiwanie wielozdjęciowe (rerank na wszystkich zdjęciach)** — ✅ ZROBIONE (wdrożone)
+- Retrieve już rankuje po najlepszym ujęciu z **wszystkich** `product_images`. Rerank dostaje **wszystkie**
+  zdjęcia kandydata (limit ~3–4), nie tylko najlepsze. W wyniku pokazywane **jedno** zdjęcie.
+- ✅ Weryfikacja: rerank ocenia na komplecie zdjęć; jakość rankingu ≥ dotychczasowej.
+
+**Krok 8.5 — Opisy wizualne (`attributes`) — LOKALNIE** — 📐 ZAPLANOWANE (0/891; konsumpcja w rerank/podglądzie gotowa; mechanizm zapisu: re-seed z `attributes` w `collection.json` LUB endpoint update per zdjęcie)
+- Zasada „kolekcje lokalnie": opis wizualny każdego zdjęcia generuję **ja (Claude Code)** czytając zdjęcia
+  (bez Bedrock vision), wg `docs/product-description-spec.md`. Zapis do `product_images.attributes`.
+- Mechanizm zapisu: endpoint aktualizacji `attributes` per zdjęcie (lub re-import `collection.json` z `attributes`
+  — zachowuje embeddingi). Rerank i opis zapytania już z nich korzystają.
+- Zakres: 287 produktów × zdjęcia — praca wsadowa (partiami). ✅ Weryfikacja: `attributes` wypełnione;
+  rerank cytuje cechy z opisu.
+
+**Krok 8.6 — Podgląd i edycja specyfikacji w katalogu (admin)** — ✅ ZROBIONE (czytelna 'Specyfikacja' + 'Opis wizualny'; edycja przez params JSON w trybie admina)
+- `CatalogPage` (modal szczegółów): **czytelny** podgląd specyfikacji + opisu wizualnego; w trybie admina
+  edycja tych pól (obok edycji `params` JSON). Kontekst: pojedynczy podglądany produkt.
+- ✅ Weryfikacja: admin widzi i edytuje specyfikacje/opis pojedynczego produktu; zmiana zapisuje się (`PUT`).
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)

@@ -186,23 +186,33 @@ def _rerank(query_bytes, cands, query_attrs=None):
         imgs = 0
         for i, c in enumerate(cands):
             attrs = json.dumps(c.get("attributes") or {}, ensure_ascii=False)[:400]
-            content.append({"text": f"Kandydat {i}: {c.get('name') or ''}. Atrybuty: {attrs}"})
-            b = _get_s3_bytes(c["image_s3_url"])
-            if b:
-                content.append({"image": {"format": _img_format(b), "source": {"bytes": b}}})
-                imgs += 1
+            params = json.dumps(c.get("params") or {}, ensure_ascii=False)[:400]
+            # Kontekst kandydata: nazwa + podtyp + opis wizualny + PARAMETRY (specyfikacja techniczna).
+            content.append({
+                "text": f"Kandydat {i}: {c.get('name') or ''} (podtyp: {c.get('subtype') or '?'}). "
+                        f"Opis: {attrs}. Parametry/specyfikacja: {params}"
+            })
+            # Wszystkie dostępne zdjęcia kandydata (nie tylko najlepsze) — do ~4.
+            for url in (c.get("image_urls") or [c.get("image_s3_url")])[:4]:
+                b = _get_s3_bytes(url) if url else None
+                if b:
+                    content.append({"image": {"format": _img_format(b), "source": {"bytes": b}}})
+                    imgs += 1
         content.append(
             {
                 "text": (
                     "Oceń każdego kandydata jako STOPIEŃ DOPASOWANIA do ZAPYTANIA w skali 0-100 "
-                    "(100 = niemal ten sam produkt; 0 = zupełnie inny mebel). "
-                    "Zwróć szczególną uwagę na KOLOR i MATERIAŁ obicia oraz ogólny kształt/bryłę — "
-                    "te cechy mogą wskazać DOKŁADNIE ten sam produkt (np. beżowy vs szary to różne modele). "
-                    "Nie przeceniaj samej wielkości (2- vs 3-osobowa) ani tła renderu. "
-                    "POMIŃ kandydatów będących zupełnie innym typem mebla lub wyraźnie niepodobnych "
-                    "kolorem i materiałem (nie umieszczaj ich w wynikach). "
-                    "Dla każdego kandydata podaj też 'powod' — krótkie (do ~12 słów) uzasadnienie oceny "
-                    "(co pasuje / co odróżnia: kolor, materiał, kształt, typ). "
+                    "(100 = niemal ten sam produkt; 0 = zupełnie inny mebel). Każdy kandydat może mieć KILKA zdjęć "
+                    "(różne ujęcia/warianty) — oceniaj po całości. "
+                    "Zwróć szczególną uwagę na KOLOR i MATERIAŁ oraz ogólny kształt/bryłę — te cechy mogą wskazać "
+                    "DOKŁADNIE ten sam produkt (np. beżowy vs szary to różne modele). "
+                    "Kandydaci mogą mieć PARAMETRY/specyfikację (np. moc W, barwa K, IP, kąt °, źródło światła, "
+                    "kolory, materiał, wymiary) — uwzględnij je, gdy pomagają rozróżnić lub potwierdzić produkt. "
+                    "Nie przeceniaj samej wielkości ani tła renderu. "
+                    "POMIŃ kandydatów będących zupełnie innym typem/kategorią lub wyraźnie niepodobnych kolorem i "
+                    "materiałem (nie umieszczaj ich w wynikach). "
+                    "Dla każdego kandydata podaj też 'powod' — krótkie (do ~14 słów) uzasadnienie oceny "
+                    "(co pasuje / co odróżnia: kolor, materiał, kształt, typ, ew. parametr). "
                     'Zwróć WYŁĄCZNIE JSON posortowany od najlepszego: '
                     '{"wyniki":[{"i":<indeks>,"dopasowanie":<0-100>,"powod":"..."}], "uzasadnienie":"1 zdanie"}. '
                     "Bez markdown."
@@ -285,11 +295,11 @@ def lambda_handler(event, _ctx):
         where = "WHERE p.category = :cat " if cat else ""
         sql = (
             "SELECT * FROM ("
-            "  SELECT DISTINCT ON (product_id) optima_id, name, params, image_s3_url, attributes,"
-            "         source, category, manufacturer, catalog_page, catalog_name, catalog_pdf, sim"
+            "  SELECT DISTINCT ON (product_id) product_id, optima_id, name, params, subtype, image_s3_url,"
+            "         attributes, source, category, manufacturer, catalog_page, catalog_name, catalog_pdf, sim"
             "  FROM ("
-            "    SELECT p.id AS product_id, p.optima_id, p.name, p.params, pi.image_s3_url, pi.attributes,"
-            "           p.source, p.category, p.manufacturer, p.catalog_page,"
+            "    SELECT p.id AS product_id, p.optima_id, p.name, p.params, p.subtype, pi.image_s3_url,"
+            "           pi.attributes, p.source, p.category, p.manufacturer, p.catalog_page,"
             "           c.name AS catalog_name, c.pdf_s3_url AS catalog_pdf,"
             "           1 - (pi.embedding <=> CAST(:q AS vector)) AS sim"
             "    FROM product_images pi JOIN products p ON p.id = pi.product_id"
@@ -311,17 +321,29 @@ def lambda_handler(event, _ctx):
 
     cands = [
         {
-            "optimaId": optima_id, "name": name, "params": params,
-            "image_s3_url": image_s3_url, "attributes": attributes,
+            "product_id": str(product_id), "optimaId": optima_id, "name": name, "params": params,
+            "subtype": subtype, "image_s3_url": image_s3_url, "attributes": attributes,
             "source": source, "category": category, "manufacturer": manufacturer,
             "catalog_page": catalog_page, "catalog_name": catalog_name, "catalog_pdf": catalog_pdf,
             "sim": round(float(sim), 4),
         }
-        for (optima_id, name, params, image_s3_url, attributes, source, category,
+        for (product_id, optima_id, name, params, subtype, image_s3_url, attributes, source, category,
              manufacturer, catalog_page, catalog_name, catalog_pdf, sim) in rows
     ]
 
-    # Rerank Sonnet 4.5 na zdjęciach i atrybutach (kandydaci już w tej samej kategorii).
+    # Wszystkie zdjęcia kandydata (do rerankingu wielozdjęciowego); w wyniku pokazujemy jedno.
+    for c in cands:
+        try:
+            imgs = _db().run(
+                "SELECT image_s3_url FROM product_images WHERE product_id = CAST(:pid AS uuid) "
+                "ORDER BY sort_order, created_at LIMIT 4",
+                pid=c["product_id"],
+            )
+            c["image_urls"] = [u for (u,) in imgs] or [c["image_s3_url"]]
+        except Exception:  # noqa: BLE001
+            c["image_urls"] = [c["image_s3_url"]]
+
+    # Rerank Sonnet 4.5 na WSZYSTKICH zdjęciach + atrybutach + specyfikacji (kandydaci w tej samej kategorii).
     order, scores, reasons = _rerank(image_bytes, cands, query_attrs)
 
     results = []
@@ -331,8 +353,10 @@ def lambda_handler(event, _ctx):
         # Wyświetlany wynik = ocena rerankingu (spójna z kolejnością); fallback: cosinus Titana.
         match = round(score / 100, 4) if score is not None else c["sim"]
         item = {
+            "id": c["product_id"],
             "optimaId": c["optimaId"],
             "name": c["name"],
+            "subtype": c["subtype"],
             "params": c["params"],
             "imageUrl": _presign_get(c["image_s3_url"]),
             "similarity": match,

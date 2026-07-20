@@ -7,6 +7,7 @@ import {
   updateProduct,
   type Product,
   type ProductDetail,
+  type ProductImage,
   type ProductPatch,
 } from '../lib/api';
 
@@ -242,10 +243,11 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
                   <Row k="Producent" v={d.manufacturer ?? '—'} />
                   <Row k="Kod" v={d.manufacturerCode ?? '—'} />
                 </dl>
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-500">Parametry</div>
-                  <pre className="max-h-48 overflow-auto rounded bg-slate-50 p-2 text-xs">{JSON.stringify(d.params, null, 2)}</pre>
-                </div>
+                <SpecView params={d.params} images={d.images} />
+                <details>
+                  <summary className="cursor-pointer text-xs text-slate-500">Parametry (surowy JSON)</summary>
+                  <pre className="mt-1 max-h-48 overflow-auto rounded bg-slate-50 p-2 text-xs">{JSON.stringify(d.params, null, 2)}</pre>
+                </details>
                 {admin && (
                   <div className="flex justify-end">
                     <button onClick={() => setEdit(true)} className={btn}>Edytuj</button>
@@ -285,6 +287,55 @@ function Row({ k, v }: { k: string; v: string }) {
       <dt className="text-slate-500">{k}</dt>
       <dd className="font-medium">{v}</dd>
     </>
+  );
+}
+
+const SPEC_LABELS: Record<string, string> = {
+  power_w: 'Moc (W)', lumens: 'Strumień (lm)', cct_k: 'Barwa (K)', ip: 'IP',
+  beam_deg: 'Kąt (°)', voltage_v: 'Napięcie (V)', colors: 'Kolory',
+};
+
+function fmt(v: unknown): string {
+  return Array.isArray(v) ? v.join(', ') : String(v);
+}
+
+function SpecView({ params, images }: { params: Record<string, unknown>; images: ProductImage[] }) {
+  const specs = (params?.specs ?? {}) as Record<string, unknown>;
+  const extra: [string, unknown][] = [
+    ['Materiał', params?.material], ['Wykończenie', params?.finish], ['Źródło światła', params?.light_source],
+  ];
+  const specRows = [
+    ...Object.entries(specs).map(([k, v]) => [SPEC_LABELS[k] ?? k, v] as [string, unknown]),
+    ...extra,
+  ].filter(([, v]) => v != null && v !== '');
+  const desc = images.find((im) => im.attributes)?.attributes as Record<string, unknown> | undefined;
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <div className="mb-1 text-xs font-medium text-slate-500">Specyfikacja</div>
+        {specRows.length ? (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm sm:grid-cols-3">
+            {specRows.map(([k, v]) => (
+              <div key={k} className="flex justify-between border-b border-slate-100 py-0.5">
+                <dt className="text-slate-500">{k}</dt>
+                <dd className="font-medium">{fmt(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <div className="text-xs text-slate-400">Brak danych technicznych.</div>
+        )}
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-slate-500">Opis wizualny</div>
+        {desc ? (
+          <p className="text-sm text-slate-700">{String(desc.opis_swobodny ?? JSON.stringify(desc))}</p>
+        ) : (
+          <div className="text-xs text-slate-400">Brak opisu wizualnego (do uzupełnienia — Faza 8.5).</div>
+        )}
+      </div>
+    </div>
   );
 }
 

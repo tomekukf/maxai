@@ -77,6 +77,12 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   + presign, wymóg grupy `admin` w Lambdzie), GET/`/search` publiczne; logowanie USER_PASSWORD_AUTH w `App.tsx`
   (`lib/auth.ts`, token dołączany w `api.ts`). `VITE_COGNITO_CLIENT_ID`/`_REGION`. Zarządzanie userami: `admin-runbook.md`.
   🎉 **Faza 7 ukończona.** Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 7.
+- 🚧 **Faza 8 — Jakość danych v1 (w toku).** ✅ 8.1 parser specyfikacji w `extract-maxlight.py`
+  (`params.specs`: power_w/lumens/cct_k/ip/beam_deg/voltage_v/colors — generyczny). ✅ 8.2 `update-maxlight-specs.mjs`
+  zaktualizował 285/287 (bez re-embed). ✅ 8.3 `/search` zwraca `id`/`subtype`/pełne `params`, a rerank+prompt
+  uwzględniają specyfikacje. ✅ 8.4 rerank ocenia na **wszystkich** zdjęciach kandydata (w wyniku 1). ✅ 8.6
+  `CatalogPage` — czytelna „Specyfikacja" + „Opis wizualny" w podglądzie (edycja przez params JSON w adminie).
+  📐 8.5 opisy wizualne (`attributes`) — 0/891, do wygenerowania LOKALNIE (konsumpcja gotowa). Szczegóły: Faza 8.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)
