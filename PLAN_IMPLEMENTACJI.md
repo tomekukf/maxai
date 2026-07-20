@@ -502,6 +502,9 @@ administracji rozwiązaniem + statystyki).
 - Zakładki: **Wyszukiwanie** (z „wczytaj kolejne"/„dlaczego podobne" z Fazy 6) + **Katalog** w trybie
   read-only (`CatalogPage admin={false}` — bez usuwania/edycji; podgląd, szukanie, link do katalogu).
 - (Opc. na później) schowek ofertowy + historia — nie zrobione.
+- **Logowanie (aktualizacja):** cała aplikacja wymaga logowania (konto handlowca `handlowiec` lub admin);
+  „Admin →" widoczne tylko dla grupy `admin`. Konto handlowca: `user` (grupa `handlowiec`). Gate frontendu +
+  tożsamość; API GET/`/search` nadal publiczne (twardo chronione tylko operacje admina — Krok 7.4).
 - ✅ Weryfikacja: handlowiec ma pełny flow bez funkcji destrukcyjnych. `tsc`/`vite build` czyste.
 
 **Krok 7.2 — Panel admina (zarządzanie danymi)** — 🟡 CZĘŚCIOWO

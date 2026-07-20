@@ -15,15 +15,17 @@ type AdminView = 'search' | 'catalog' | 'import' | 'ingest' | 'stats' | 'docs';
 export default function App() {
   const [area, setArea] = useState<Area>('user');
   const [session, setSession] = useState<Session | null>(null);
+  const [ready, setReady] = useState(false);
   const [userView, setUserView] = useState<UserView>('search');
   const [adminView, setAdminView] = useState<AdminView>('catalog');
 
   useEffect(() => {
     const s = loadSession();
-    if (s && isAdmin(s)) {
+    if (s) {
       setAuthToken(s.idToken);
       setSession(s);
     }
+    setReady(true);
   }, []);
 
   function onLogin(s: Session) {
@@ -39,6 +41,9 @@ export default function App() {
 
   const admin = isAdmin(session);
 
+  if (!ready) return null;
+  if (!session) return <LoginGate onLogin={onLogin} />;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="border-b bg-white">
@@ -50,11 +55,15 @@ export default function App() {
             <>
               <button className={tab(userView === 'search')} onClick={() => setUserView('search')}>Wyszukiwanie</button>
               <button className={tab(userView === 'catalog')} onClick={() => setUserView('catalog')}>Katalog</button>
-              <button className="ml-auto rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={() => setArea('admin')}>
-                Admin →
-              </button>
+              <span className="ml-auto text-xs text-slate-400">{session.username}</span>
+              {admin && (
+                <button className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={() => setArea('admin')}>
+                  Admin →
+                </button>
+              )}
+              <button className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={onLogout}>Wyloguj</button>
             </>
-          ) : admin ? (
+          ) : (
             <>
               <button className={tab(adminView === 'search')} onClick={() => setAdminView('search')}>Wyszukiwanie</button>
               <button className={tab(adminView === 'catalog')} onClick={() => setAdminView('catalog')}>Katalog</button>
@@ -62,16 +71,12 @@ export default function App() {
               <button className={tab(adminView === 'ingest')} onClick={() => setAdminView('ingest')}>Zasilanie</button>
               <button className={tab(adminView === 'stats')} onClick={() => setAdminView('stats')}>Statystyki</button>
               <button className={tab(adminView === 'docs')} onClick={() => setAdminView('docs')}>Dokumentacja</button>
-              <span className="ml-auto text-xs text-slate-400">{session?.username}</span>
-              <button className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={onLogout}>Wyloguj</button>
+              <span className="ml-auto text-xs text-slate-400">{session.username}</span>
               <button className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={() => setArea('user')}>
                 ← Handlowiec
               </button>
+              <button className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={onLogout}>Wyloguj</button>
             </>
-          ) : (
-            <button className="ml-auto rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={() => setArea('user')}>
-              ← Panel handlowca
-            </button>
           )}
         </div>
       </nav>
@@ -79,7 +84,6 @@ export default function App() {
       {area === 'user' && userView === 'search' && <SearchPage />}
       {area === 'user' && userView === 'catalog' && <CatalogPage admin={false} />}
 
-      {area === 'admin' && !admin && <LoginGate onLogin={onLogin} />}
       {area === 'admin' && admin && adminView === 'search' && <SearchPage />}
       {area === 'admin' && admin && adminView === 'catalog' && <CatalogPage admin />}
       {area === 'admin' && admin && adminView === 'import' && <ImportPage />}
@@ -100,9 +104,7 @@ function LoginGate({ onLogin }: { onLogin: (s: Session) => void }) {
     setBusy(true);
     setErr(null);
     try {
-      const s = await login(u.trim(), p);
-      if (!isAdmin(s)) throw new Error('Konto nie ma roli admin.');
-      onLogin(s);
+      onLogin(await login(u.trim(), p));
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -111,32 +113,35 @@ function LoginGate({ onLogin }: { onLogin: (s: Session) => void }) {
   }
 
   return (
-    <main className="mx-auto max-w-sm px-4 py-16">
-      <div className="rounded-lg border bg-white p-5">
-        <h2 className="text-lg font-semibold">Panel admina — logowanie</h2>
-        <p className="mt-1 text-sm text-slate-500">Zaloguj się kontem z grupą „admin" (Cognito).</p>
-        <input
-          value={u}
-          onChange={(e) => { setU(e.target.value); setErr(null); }}
-          className="mt-3 w-full rounded border border-slate-300 px-3 py-1.5 text-sm"
-          placeholder="login"
-          autoComplete="username"
-        />
-        <input
-          type="password"
-          value={p}
-          onChange={(e) => { setP(e.target.value); setErr(null); }}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-          className="mt-2 w-full rounded border border-slate-300 px-3 py-1.5 text-sm"
-          placeholder="hasło"
-          autoComplete="current-password"
-        />
-        {err && <div className="mt-1 text-xs text-red-700">{err}</div>}
-        <button onClick={submit} disabled={busy} className="mt-3 w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
-          {busy ? 'Logowanie…' : 'Zaloguj'}
-        </button>
-      </div>
-    </main>
+    <div className="min-h-screen bg-slate-50">
+      <main className="mx-auto max-w-sm px-4 py-16">
+        <div className="rounded-lg border bg-white p-5">
+          <div className="mb-1 font-semibold">maxai</div>
+          <h2 className="text-lg font-semibold">Logowanie</h2>
+          <p className="mt-1 text-sm text-slate-500">Zaloguj się kontem handlowca lub administratora.</p>
+          <input
+            value={u}
+            onChange={(e) => { setU(e.target.value); setErr(null); }}
+            className="mt-3 w-full rounded border border-slate-300 px-3 py-1.5 text-sm"
+            placeholder="login"
+            autoComplete="username"
+          />
+          <input
+            type="password"
+            value={p}
+            onChange={(e) => { setP(e.target.value); setErr(null); }}
+            onKeyDown={(e) => e.key === 'Enter' && submit()}
+            className="mt-2 w-full rounded border border-slate-300 px-3 py-1.5 text-sm"
+            placeholder="hasło"
+            autoComplete="current-password"
+          />
+          {err && <div className="mt-1 text-xs text-red-700">{err}</div>}
+          <button onClick={submit} disabled={busy} className="mt-3 w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+            {busy ? 'Logowanie…' : 'Zaloguj'}
+          </button>
+        </div>
+      </main>
+    </div>
   );
 }
 

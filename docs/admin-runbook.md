@@ -25,9 +25,12 @@ Jedno źródło prawdy — edytuj ten plik w repo.
    ```
    Konkretne wartości dla tego środowiska: **`SECRETS.local.md`** (w katalogu głównym repo, poza gitem).
 2. **Start:** `cd frontend && npm install && npm run dev` → `http://localhost:5173`.
-3. **Panel handlowca** działa bez logowania (Wyszukiwanie, Katalog).
-4. **Panel admina:** kliknij „Admin →" i zaloguj się kontem z grupy `admin`.
-   Login/hasło startowe: patrz **`SECRETS.local.md`** (nie trzymamy haseł w repo).
+3. **Logowanie (wymagane):** aplikacja startuje ekranem logowania.
+   - **Handlowiec** (grupa `handlowiec`) → panel handlowca (Wyszukiwanie, Katalog).
+   - **Admin** (grupa `admin`) → dodatkowo przycisk „Admin →" (import/edycja/usuwanie, statystyki, dokumentacja).
+   - Loginy/hasła: patrz **`SECRETS.local.md`** (nie trzymamy haseł w repo).
+   - Uwaga: to gate frontendu + tożsamość. Endpointy GET/`/search` są nadal publiczne po stronie API
+     (twardo chronione są tylko operacje admina — patrz niżej); pełne zamknięcie API to dalszy krok.
 
 ## Zasada kosztowa (WAŻNE)
 
