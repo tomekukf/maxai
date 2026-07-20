@@ -181,8 +181,8 @@ def _create(body):
     if not images:
         keys = body.get("imageKeys") or ([body["imageKey"]] if body.get("imageKey") else [])
         images = [{"key": k} for k in keys]
-    if not images or not (optima_id or manufacturer_code):
-        return _resp(400, {"error": "Wymagane: images[]/imageKeys[] oraz optimaId lub manufacturerCode"})
+    if not images or not (optima_id or manufacturer_code or body.get("name")):
+        return _resp(400, {"error": "Wymagane: images[] oraz optimaId, manufacturerCode lub name"})
 
     name = body.get("name")
     source_url = body.get("sourceUrl")

@@ -68,7 +68,8 @@ async function main() {
       const res = await fetch(`${API}/products`, {
         method: 'POST', headers: AUTH(),
         body: JSON.stringify({
-          name: p.name, manufacturer: p.manufacturer, manufacturerCode: p.manufacturerCode,
+          name: p.name, manufacturer: p.manufacturer,
+          manufacturerCode: p.manufacturerCode || p.params?.handle, // handle = stabilny klucz dedup gdy brak kodu
           source: 'web', category: p.category, subtype: p.subtype, groupId: p.group_id,
           catalogId, params: p.params ?? {}, describe: false, images,
         }),
