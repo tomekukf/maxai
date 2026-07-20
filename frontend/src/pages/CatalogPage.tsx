@@ -72,6 +72,26 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
     return order.map((k) => m.get(k) as Product[]);
   }, [filtered]);
 
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const groupKey = (p: Product) => p.groupId || p.id;
+
+  // Scal grupę źródłową (przeciąganą) do grupy docelowej: ustaw group_id wszystkich elementów.
+  async function mergeInto(src: Product[], dst: Product[]) {
+    const targetGid = groupKey(dst[0]);
+    if (groupKey(src[0]) === targetGid) return; // ta sama grupa
+    if (!confirm(`Połączyć „${src[0].name}" (${src.length} szt.) z grupą „${dst[0].name}"?`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      for (const p of src) await updateProduct(p.id, { groupId: targetGid });
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onDeleteOne(id: string, label: string) {
     if (!confirm(`Usunąć produkt ${label} (wraz ze zdjęciami)?`)) return;
     setBusy(true);
@@ -143,12 +163,34 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
         {err && <div className="text-sm text-red-700">Błąd: {err}</div>}
         {!items && !err && <div className="text-sm text-slate-500">Ładuję…</div>}
 
+        {admin && items && (
+          <div className="text-xs text-slate-400">
+            💡 Przeciągnij kafelek na inny, aby połączyć produkty w grupę wariantów. Rozłączanie: w podglądzie produktu.
+          </div>
+        )}
+
         {items && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {grouped.map((grp) => {
               const p = grp[0];
               return (
-                <div key={p.groupId || p.id} className="relative rounded-lg border bg-white p-2">
+                <div
+                  key={p.groupId || p.id}
+                  className={`relative rounded-lg border bg-white p-2 ${admin && dragKey && dragKey !== groupKey(p) ? 'ring-1 ring-dashed ring-slate-300' : ''}`}
+                  draggable={admin}
+                  onDragStart={() => setDragKey(groupKey(p))}
+                  onDragEnd={() => setDragKey(null)}
+                  onDragOver={admin ? (e) => e.preventDefault() : undefined}
+                  onDrop={
+                    admin
+                      ? () => {
+                          const src = grouped.find((g) => groupKey(g[0]) === dragKey);
+                          if (src) mergeInto(src, grp);
+                          setDragKey(null);
+                        }
+                      : undefined
+                  }
+                >
                   {admin && (
                     <button
                       onClick={() => onDeleteOne(p.id, p.optimaId ?? p.manufacturerCode ?? p.name ?? p.id)}
@@ -296,7 +338,27 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
                   <pre className="mt-1 max-h-48 overflow-auto rounded bg-slate-50 p-2 text-xs">{JSON.stringify(d.params, null, 2)}</pre>
                 </details>
                 {admin && (
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    {d.groupId && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Odłączyć ten produkt od grupy wariantów?')) return;
+                          setSaving(true);
+                          try {
+                            await updateProduct(id, { groupId: id });
+                            onSaved();
+                          } catch (e) {
+                            setErr((e as Error).message);
+                          } finally {
+                            setSaving(false);
+                          }
+                        }}
+                        disabled={saving}
+                        className={btn}
+                      >
+                        Odłącz od grupy
+                      </button>
+                    )}
                     <button onClick={() => setEdit(true)} className={btn}>Edytuj</button>
                   </div>
                 )}
