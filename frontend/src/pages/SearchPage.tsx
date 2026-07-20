@@ -14,7 +14,7 @@ const CAPTURE_WIDTH = 1000;
 const DISPLAY_MAX = 720;
 
 const btnPrimary =
-  'rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50';
+  'rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50';
 const navBtn = 'rounded border border-slate-300 px-2 py-1 disabled:opacity-40';
 
 function cropToBase64(
@@ -442,14 +442,16 @@ function ResultCard({
   const [skuCopied, setSkuCopied] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   return (
-    <div className="rounded-lg border bg-white p-3">
-      <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
-        <img src={r.imageUrl} alt={r.name} className="h-full w-full object-contain" />
+    <div className="overflow-hidden rounded-xl border bg-white shadow-card transition hover:shadow-md">
+      <div className="aspect-square overflow-hidden bg-slate-100">
+        <img src={r.imageUrl} alt={r.name} className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]" />
       </div>
-      <div className="text-xs text-slate-500">
-        #{rank} · dopasowanie {(r.similarity * 100).toFixed(0)}%
+      <div className="p-3">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent-dark">{(r.similarity * 100).toFixed(0)}%</span>
+        <span className="text-slate-400">#{rank}</span>
       </div>
-      <div className="line-clamp-2 text-sm font-medium">{r.name}</div>
+      <div className="mt-1 line-clamp-2 text-sm font-medium">{r.name}</div>
 
       {r.optimaId && (
         <div className="mt-2 flex items-center gap-2">
@@ -518,6 +520,7 @@ function ResultCard({
         {showWhy ? 'Ukryj' : 'Dlaczego podobne?'}
       </button>
       {showWhy && <WhyPanel r={r} queryAttrs={queryAttrs} />}
+      </div>
     </div>
   );
 }

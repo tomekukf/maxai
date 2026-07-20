@@ -48,8 +48,10 @@ export default function App() {
     <div className="min-h-screen bg-slate-50">
       <nav className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-3">
-          <span className="mr-2 font-semibold">maxai</span>
-          <span className="mr-2 text-xs text-slate-400">{area === 'admin' ? 'panel admina' : 'panel handlowca'}</span>
+          <span className="mr-2 text-lg font-semibold tracking-tight text-brand">maxai</span>
+          <span className="mr-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+            {area === 'admin' ? 'panel admina' : 'panel handlowca'}
+          </span>
 
           {area === 'user' ? (
             <>
@@ -113,10 +115,11 @@ function LoginGate({ onLogin }: { onLogin: (s: Session) => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="mx-auto max-w-sm px-4 py-16">
-        <div className="rounded-lg border bg-white p-5">
-          <div className="mb-1 font-semibold">maxai</div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+      <main className="mx-auto max-w-sm px-4 py-20">
+        <div className="rounded-2xl border bg-white p-6 shadow-card">
+          <div className="mb-1 text-2xl font-semibold tracking-tight text-brand">maxai</div>
+          <p className="mb-4 text-xs text-slate-400">Asystent doboru produktów — maxfliz</p>
           <h2 className="text-lg font-semibold">Logowanie</h2>
           <p className="mt-1 text-sm text-slate-500">Zaloguj się kontem handlowca lub administratora.</p>
           <input
@@ -136,7 +139,7 @@ function LoginGate({ onLogin }: { onLogin: (s: Session) => void }) {
             autoComplete="current-password"
           />
           {err && <div className="mt-1 text-xs text-red-700">{err}</div>}
-          <button onClick={submit} disabled={busy} className="mt-3 w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+          <button onClick={submit} disabled={busy} className="mt-4 w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50">
             {busy ? 'Logowanie…' : 'Zaloguj'}
           </button>
         </div>
@@ -147,6 +150,6 @@ function LoginGate({ onLogin }: { onLogin: (s: Session) => void }) {
 
 function tab(active: boolean): string {
   return active
-    ? 'rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white'
+    ? 'rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white'
     : 'rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100';
 }
