@@ -22,6 +22,8 @@
 | Zasilanie danymi | **BRW (JSON-LD, ~25 sof)**, ID `BRW-<kod>` | Agata za Cloudflare → pivot na BRW. Brak dostępu do Optimy klienta. |
 | Wizualizacje testowe | **Dostarcza użytkownik (2 PDF-y)** | Patrz sekcja D. Fallback: kompozycja realnych zdjęć. |
 | **Waga dopasowania: kształt > kolor** ✅ (od Fazy 8) | Rerank przeważony: **bryła/kształt/proporcje/konstrukcja + opis wizualny = główne**, kolor/materiał = drugorzędne | Ten sam produkt bywa w wielu kolorach/tkaninach/wykończeniach (warianty) — kolor jako główny sygnał zaniżał trafność. Różnica koloru nie obniża mocno oceny przy zgodnej bryle. Uwaga: retrieve (Titan) jest czuły na kolor → większy `recallK` (12), by warianty docierały do reranku. |
+| **Bedrock tylko za zgodą (etap dev)** ✅ | Nowa praca (scraping, kategoryzacja, opisy, model, GUI) = **lokalny LLM (Claude Code)**; NIE dokładamy nowych wywołań Bedrock bez zgody użytkownika na tym etapie | Kontrola kosztów w dev. Obecne użycia Bedrock zostają: Titan embeddingi (import) + Sonnet opis/rerank (runtime `/search`). Szersze użycie Bedrock dopiero w **testach finalnych**. |
+| **Bez cen / zakres = dobór do wizualizacji** ✅ | Aplikacja pomaga opiekunom architektów **znaleźć produkt użyty w wizualizacji lub najbliższy substytut**; **ceny/wyceny poza zakresem** | Z maxfliz NIE pobieramy/nie pokazujemy cen. Opiekunowi wystarczy „mamy taki / podobny produkt" — dalej decyduje sam. |
 | **Tworzenie kolekcji = LOKALNIE** ✅ | Analiza katalogów (ekstrakcja, klasyfikacja, opis) **lokalnie** (Claude Code / model lokalny), NIE na Bedrock vision | Ograniczenie kosztów Bedrock. Na AWS pozostają wyłącznie: (a) **analiza dokumentu przy wyszukiwaniu** (opis wycinka + rerank), (b) **embeddingi Titan** (jedyny model bez lokalnego odpowiednika; tani; liczony raz przy imporcie, potem **eksportowany** → re-import bez Bedrock). Interaktywny import z vision na AWS (`/catalog/analyze-page`, Krok 5.2/5.5) odłożony na rzecz ścieżki lokalnej + import/eksport (Krok 7.5). Zrobione dla Maxlight (`extract-maxlight.py` + `seed-maxlight.mjs`). |
 
 ---
@@ -641,6 +643,44 @@ Formaty specyfikacji spójne w katalogu: `W` (moc), `lm`, `K` (barwa), `IP`, `°
   wielu** kafelków + „Połącz zaznaczone w grupę"; „Odłącz od grupy" w podglądzie produktu. PUT `group_id`, bez zmian backendu.
 - Koszt: 0 zł Bedrock (logika lokalna/DB). ✅ Weryfikacja: EMPIRE P0634D+P0635D (chrom+złoto, 121 W) →
   jedna grupa; P0636D (17 W) osobno; TRIAC nieprzemerdżony.
+
+### Faza 10 — Zasilanie z maxfliz (oferta publiczna) + wielokategoryjność + redesign UI
+
+**Kontekst:** produkt budujemy dla **maxfliz.pl** (dla ich pracowników — dobór produktów do wizualizacji
+architektów). maxfliz to sklep **Shopify** → publiczne, ustrukturyzowane JSON‑y (`/products.json`, `robots.txt`
+pozwala, `Crawl-delay: 1`). Oferta publiczna = to, co na stronie; oferta niepubliczna = katalogi PDF producentów
+(produkty spoza strony). Rozpoznanie: wielu vendorów (COEM/GRESPANIA/MIRAGE/ATLAS/RAGNO/PORCELANOSA = **płytki**,
+MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per produkt: tytuł (często z kodem),
+`vendor`, wszystkie zdjęcia (CDN), opis (`body_html`), warianty. **Cen nie używamy.**
+
+**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)**
+- `scripts/scrape-maxfliz.mjs`: paginacja `/products.json?limit=250&page=N` (1 req/s) → **wszyscy vendorzy, całość**
+  → `rawdata/maxfliz/collection.json` + zdjęcia (pobrane z CDN). Mapowanie (lokalnie, bez Bedrock): `vendor`→manufacturer,
+  kod z tytułu→`manufacturer_code`, opis/`vendor`/tagi→`category`+`subtype`, warianty/opcje→`group_id`, `source='web'`.
+  **Bez cen.** Import przez panel admina (Faza 7.5). Dedup po `(manufacturer, manufacturer_code)` z katalogami PDF.
+- Rozróżnienie źródeł: `source='web'` (maxfliz, oferta publiczna) vs `source='catalog'` (katalogi producentów, produkty
+  spoza strony) vs `optima`.
+- ✅ Weryfikacja: pełny zaciąg → import → produkty wyszukiwalne; brak duplikatów; MAXLIGHT z web scala się z katalogiem po kodzie.
+
+**Krok 10.2 — Analiza i rozszerzenie modelu danych pod wiele kategorii (temat 2)**
+- Analiza obecnego modelu: `products.params` (JSONB — elastyczny, różne klucze per kategoria) + `category/subtype/source/
+  group_id/manufacturer/manufacturer_code` + `product_images`. **Wniosek wstępny:** rdzeń wystarcza (JSONB skaluje się na
+  kategorie), ale brakuje: (a) **konwencji `params` per kategoria** (płytki: format/rozmiar/powierzchnia/kolekcja/imitacja;
+  meble: wymiary/materiał_obicia/typ; oświetlenie: mamy — moc/lm/K/IP/kąt), (b) pola **`collection`/seria**, (c) uporządkowania
+  wartości `source` ('web'|'catalog'|'optima'), (d) rozszerzenia **taksonomii** (płytki, dywan, podkategorie mebli).
+- Do zrobienia: `docs/params-per-category.md` (konwencje kluczy), ew. migracja (kolumna `collection`), rozszerzona taksonomia
+  w spec opisu; **bez rewolucji** — JSONB zostaje, zmiany addytywne.
+- ✅ Weryfikacja: model przyjmuje płytki + meble + oświetlenie bez utraty danych; filtry/bramka kategorii działają per kategoria.
+
+**Krok 10.3 — Redesign GUI w stylu maxfliz (temat 3) — „menedżerowie kupują oczami"**
+- Styl maxfliz (rozpoznany): font **Jost**, kolor główny **#760039** (burgund), akcent **#108474** (turkus), białe tło,
+  dużo grafiki; hasło „Eksperci od Wnętrz". 
+- Zakres: system stylów (Tailwind: kolory/typografia), **eksponowane duże zdjęcia** produktów, ładne karty (hover, cień),
+  nagłówek/hero, spójny wygląd wyszukiwania i katalogu, dopracowany ekran logowania. Fonty/obrazy **self-hosted** (bez
+  zależności zewnętrznych, pod CSP Amplify). Frontend-only, darmowe.
+- ✅ Weryfikacja: spójny, estetyczny UI w stylu maxfliz; pozytywny odbiór wizualny (menedżerski).
+
+> Zasady przekrojowe (sekcja A): **Bedrock tylko za zgodą** (nowa praca lokalnie) oraz **bez cen** (dobór do wizualizacji).
 
 ---
 

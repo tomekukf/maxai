@@ -88,6 +88,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   `/search` i `/products/{id}` zwracają `catalogPageImageUrl`; front otwiera lekki obraz (nie 200 MB PDF), „(cały PDF)"
   drugorzędnie. 9.2 grupowanie wariantów: migracja `005` (`group_id`), heurystyka `slug(name)-subtype-{moc}w-{lm}lm`,
   zwijanie w jedną kartę (search+katalog), edytowalne w adminie. Koszt: darmowe/grosze. Szczegóły: Faza 9.
+- 📐 **Faza 10 — maxfliz jako źródło + wielokategoryjność + redesign UI (zaplanowana).** Klient = **maxfliz.pl** (Shopify;
+  publiczne `/products.json`, robots OK, Crawl-delay 1; vendorzy: płytki/oświetlenie/meble). 10.1 `scrape-maxfliz.mjs`
+  (pełna oferta publiczna, bez cen → rawdata → import; source='web' vs 'catalog'). 10.2 analiza/rozszerzenie modelu pod wiele
+  kategorii (konwencje `params` per kategoria, taksonomia, `collection`). 10.3 redesign GUI w stylu maxfliz (Jost, #760039
+  burgund, #108474 turkus, dużo grafiki). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 10.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)
@@ -106,6 +111,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - **Embeddingi:** Amazon Titan Multimodal (1024 wym.).
 - **Kategoria = jedyny twardy filtr (od Fazy 5).** Substytut zawsze w tej samej kategorii; wszystko inne
   (kolor, materiał, wymiar) pozostaje miękkie. Kontrolowana taksonomia wspólna dla importu i wyszukiwania.
+- **Bedrock tylko za zgodą (etap dev).** Nowa praca (scraping/kategoryzacja/opisy/model/GUI) = lokalny LLM (Claude Code);
+  NIE dokładać nowych wywołań Bedrock bez zgody. Obecne zostają: Titan (import) + Sonnet opis/rerank (runtime `/search`).
+  Szerszy Bedrock dopiero w testach finalnych.
+- **Bez cen / zakres = dobór do wizualizacji.** Aplikacja pomaga opiekunom architektów znaleźć produkt użyty w wizualizacji
+  lub najbliższy substytut; ceny/wyceny poza zakresem (z maxfliz nie pobieramy cen).
 - **Tworzenie kolekcji = LOKALNIE (ograniczenie kosztów Bedrock).** Analiza katalogów (ekstrakcja/klasyfikacja/opis)
   lokalnie (Claude Code), NIE na Bedrock vision. Na AWS tylko: (a) analiza dokumentu przy wyszukiwaniu (opis wycinka
   + rerank), (b) embeddingi Titan (raz przy imporcie; **eksportowane** → re-import bez Bedrock). Import/eksport kolekcji
