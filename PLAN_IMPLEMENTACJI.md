@@ -654,10 +654,12 @@ pozwala, `Crawl-delay: 1`). Oferta publiczna = to, co na stronie; oferta niepubl
 MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per produkt: tytuł (często z kodem),
 `vendor`, wszystkie zdjęcia (CDN), opis (`body_html`), warianty. **Cen nie używamy.**
 
-**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)** — 🟡 NARZĘDZIE GOTOWE (masowy import za zgodą)
+**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)** — ✅ NARZĘDZIE + IMPORT CZĘŚCIOWY (oświetlenie + łazienka)
 - Stan: `scrape-maxfliz.mjs` gotowy i przetestowany; pełny zaciąg metadanych = **3749 produktów** (płytki 1310,
-  oświetlenie 872, dywany 180, meble ~218, **inne 1169** — do doklasyfikowania w 10.2). Pobranie zdjęć + import
-  (embeddingi Titan, ~kilka zł) — **czeka na zgodę** (opcje: całość / wybrani vendorzy / partiami).
+  oświetlenie 872, dywany 180, meble ~218, **inne 1169** — do doklasyfikowania w 10.2).
+- ✅ **Zaimportowane do bazy:** oświetlenie **869** + łazienka **779** (zdjęcia + embeddingi Titan, `source='web'`).
+  Reszta (płytki/dywany/tapety/podłogi/drzwi/sztukateria/lustro/meble) — pobranie zdjęć + import Titan **czeka na zgodę**
+  (opcje: całość / wybrani vendorzy / partiami).
 - `scripts/scrape-maxfliz.mjs`: paginacja `/products.json?limit=250&page=N` (1 req/s) → **wszyscy vendorzy, całość**
   → `rawdata/maxfliz/collection.json` + zdjęcia (pobrane z CDN). Mapowanie (lokalnie, bez Bedrock): `vendor`→manufacturer,
   kod z tytułu→`manufacturer_code`, opis/`vendor`/tagi→`category`+`subtype`, warianty/opcje→`group_id`, `source='web'`.
@@ -675,13 +677,22 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
 - ⏳ Do zrobienia (reszta modelu): `docs/params-per-category.md` (konwencje kluczy per kategoria), ew. pole `collection`/seria.
 - ✅ Weryfikacja: 0 „inne"; bramka kategorii rozpoznaje nowe kategorie.
 
-**Krok 10.4 — Detekcja proponuje tylko kategorie dostępne w bazie (nowy wymóg)**
+**Krok 10.4 — Detekcja proponuje tylko kategorie dostępne w bazie (nowy wymóg)** — ✅ ZROBIONE (wdrożone)
 - **Cel:** po auto-detekcji elementów z wizualizacji (`/detect`) pokazywać do wyszukania **tylko te, których kategorię mamy
   w bazie** (nie proponować np. „doniczki", jeśli takich produktów nie mamy).
-- Plan: (a) lekki `GET /categories` (DISTINCT `category` z produktów, z licznikami); (b) mapowanie etykiety detekcji → kanoniczna
-  kategoria (słownik, jak w `/search`); (c) w `SearchPage` filtrować podpowiedzi do kategorii obecnych w bazie (reszta ukryta
-  lub wyszarzona „brak w ofercie"). Lokalnie/0 Bedrock (detekcja `/detect` już istnieje).
-- ✅ Weryfikacja: detekcja pokazuje tylko elementy z posiadanych kategorii; brak sugestii spoza oferty.
+- Zrobione: (a) ✅ `GET /categories` (`category` + licznik, GROUP BY; publiczny GET w `products/handler.py`, trasa w CDK);
+  (b) ✅ mapowanie etykiety detekcji → kanoniczna kategoria (`labelToCategory` w `SearchPage`, słownik regex jak w `/search`);
+  (c) ✅ `SearchPage` filtruje podpowiedzi do kategorii obecnych w bazie (reszta pomijana, licznik „X spoza asortymentu pominięto”);
+  (d) ✅ prompt `/detect` rozszerzony o łazienkę + wykończenie (płytki/podłogi/drzwi/lustro/tapety/sztukateria), ignoruje dekoracje.
+  Lokalnie/0 nowego Bedrock (detekcja `/detect` już istnieje).
+- ✅ Weryfikacja: `GET /categories` zwraca liczby per kategoria; detekcja pokazuje tylko elementy z posiadanych kategorii.
+
+**Krok 10.5 — Paginacja katalogu (dołączone do pakietu 10.4)** — ✅ ZROBIONE (wdrożone)
+- **Problem:** `GET /products` zwracał całą bazę (1908) i presignował każde zdjęcie → wolne ładowanie katalogu.
+- Zrobione: ✅ `GET /products` z `limit`/`offset` + `total`, filtry server-side `q`/`category`/`source`, tryb `slim`
+  (bez presignów — do `StatsPage`); presign tylko widocznej strony. ✅ `CatalogPage` „Pokaż więcej" + wyszukiwarka/kategoria
+  liczone po stronie serwera (kategorie z `GET /categories`); ✅ `StatsPage` skanuje bazę stronicowo w trybie `slim`.
+- ✅ Weryfikacja na produkcji: `total=1908`, `q=arlette`→2, `slim`→`imageUrl=null`.
 
 **Krok 10.3 — Redesign GUI w stylu maxfliz (temat 3) — „menedżerowie kupują oczami"**
 - Styl maxfliz (rozpoznany): font **Jost**, kolor główny **#760039** (burgund), akcent **#108474** (turkus), białe tło,
@@ -717,6 +728,18 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
   katalog <nazwa>" → `rawdata/<nazwa>/collection.json` + zdjęcia → **Import w panelu admina** (Faza 7.5). Ręcznie:
   komendy skryptów (extract/seed/render-pages) opisane w runbooku.
 - ✅ Weryfikacja: w GUI (Dokumentacja) jest kompletna instrukcja „od PDF do bazy" + ręczna orchestracja; Claude wykonuje flow bez szukania.
+
+**Krok 11.4 — Import katalogów wewnętrznych MAXLIVING (7 katalogów PDF)** — ✅ ZROBIONE (wdrożone)
+- Ekstrakcja lokalna (`scripts/extract-maxliving.py`, pymupdf, 0 Bedrock): 1 produkt/strona; tożsamość = **nazwa +
+  ref do katalogu wsadowego + link do strony** (brak idealnego kodu/Optimy). Kategoria z reguł typu (TYPE_RULES).
+- Zaimportowane jako **7 usuwalnych źródeł** (`source='catalog'`): meble 2026 (125), łóżka 37, sofy/narożniki 37,
+  krzesła 17, stoły/stoliki 15, meble skrzyniowe 15, fotele 14 = **260 produktów**. Strony katalogów wyrenderowane do
+  JPEG w S3 (`catalogs/maxliving-*/pages/`) + PDF-y w S3 → szybki link „otwórz stronę".
+- ✅ Weryfikacja (audyt): baza **1908 produktów / 4935 zdjęć z embeddingiem**; kadr fotela → kategoria `fotel` → produkty
+  MAXLIVING z linkiem do strony; 0 błędów/duplikatów w imporcie.
+
+**Stan bazy po Fazach 10–11:** 1908 produktów, 4935 zdjęć (100% z embeddingiem), 9 źródeł — web (maxfliz): oświetlenie 869 +
+łazienka 779; catalog (MAXLIVING): 260 (7 katalogów).
 
 ---
 
