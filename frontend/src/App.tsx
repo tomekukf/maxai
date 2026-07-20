@@ -10,7 +10,7 @@ import { setAuthToken } from './lib/api';
 
 type Area = 'user' | 'admin';
 type UserView = 'search' | 'catalog';
-type AdminView = 'catalog' | 'import' | 'ingest' | 'stats' | 'docs';
+type AdminView = 'search' | 'catalog' | 'import' | 'ingest' | 'stats' | 'docs';
 
 export default function App() {
   const [area, setArea] = useState<Area>('user');
@@ -56,6 +56,7 @@ export default function App() {
             </>
           ) : admin ? (
             <>
+              <button className={tab(adminView === 'search')} onClick={() => setAdminView('search')}>Wyszukiwanie</button>
               <button className={tab(adminView === 'catalog')} onClick={() => setAdminView('catalog')}>Katalog</button>
               <button className={tab(adminView === 'import')} onClick={() => setAdminView('import')}>Import kolekcji</button>
               <button className={tab(adminView === 'ingest')} onClick={() => setAdminView('ingest')}>Zasilanie</button>
@@ -79,6 +80,7 @@ export default function App() {
       {area === 'user' && userView === 'catalog' && <CatalogPage admin={false} />}
 
       {area === 'admin' && !admin && <LoginGate onLogin={onLogin} />}
+      {area === 'admin' && admin && adminView === 'search' && <SearchPage />}
       {area === 'admin' && admin && adminView === 'catalog' && <CatalogPage admin />}
       {area === 'admin' && admin && adminView === 'import' && <ImportPage />}
       {area === 'admin' && admin && adminView === 'ingest' && <IngestPage />}
