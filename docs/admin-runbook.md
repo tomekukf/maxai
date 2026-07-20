@@ -69,8 +69,19 @@ Pełny przepływ (0 wywołań Bedrock vision):
    `CLAUDE_INSTRUCTIONS.md` i wyprodukuje `rawdata/<nazwa>/collection.json` + `rawdata/<nazwa>/images/`.
 3. **Import (panel admina → Import kolekcji):** wybierz folder `rawdata/<nazwa>/` → aplikacja tworzy katalog,
    wgrywa zdjęcia do S3 i zapisuje produkty (`describe:false`; embedding = Titan przy imporcie lub z paczki).
-4. (Opcjonalnie) PDF do S3 pod link „Otwórz katalog":
-   `aws s3 cp <pdf> s3://<bucket>/catalogs/<nazwa>/original.pdf`.
+4. (Opcjonalnie) **Lekkie strony katalogu** (szybkie „Otwórz katalog" zamiast 200 MB PDF):
+   `python scripts/render-catalog-pages.py <pdf> <nazwa>` → `rawdata/<nazwa>/pages/` →
+   `aws s3 cp rawdata/<nazwa>/pages "s3://<bucket>/catalogs/<folder>/pages/" --recursive`.
+   Oraz PDF: `aws s3 cp <pdf> s3://<bucket>/catalogs/<folder>/original.pdf`.
+
+### Ręczna orchestracja (komendy)
+
+Gdy chcesz zrobić wszystko z konsoli, bez GUI:
+- **Ekstrakcja → rawdata:** `python scripts/prepare-catalog.py <pdf> <nazwa>` (potem Claude wg `CLAUDE_INSTRUCTIONS.md`).
+- **Seed do AWS bez GUI:** `SKIP_UPLOAD=1 node scripts/seed-maxlight.mjs` (wzorzec; dla nowej kolekcji analogiczny skrypt).
+- **Usunięcie całego źródła i re-import:** panel admina → lista źródeł → „Usuń źródło" (kaskada) **lub**
+  `DELETE /catalogs/{id}`; następnie ponowny import paczki. To realizuje „łatwo usunąć zakres i dodać od nowa".
+- **maxfliz (oferta publiczna, Faza 10.1 — planowane):** `node scripts/scrape-maxfliz.mjs` → `rawdata/maxfliz/` → import w panelu.
 
 ## Import / eksport kolekcji
 
