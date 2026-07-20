@@ -729,17 +729,20 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
   komendy skryptów (extract/seed/render-pages) opisane w runbooku.
 - ✅ Weryfikacja: w GUI (Dokumentacja) jest kompletna instrukcja „od PDF do bazy" + ręczna orchestracja; Claude wykonuje flow bez szukania.
 
-**Krok 11.4 — Import katalogów wewnętrznych MAXLIVING (7 katalogów PDF)** — ✅ ZROBIONE (wdrożone)
+**Krok 11.4 — Import katalogów wewnętrznych MAXLIVING (PDF)** — ✅ ZROBIONE (wdrożone)
 - Ekstrakcja lokalna (`scripts/extract-maxliving.py`, pymupdf, 0 Bedrock): 1 produkt/strona; tożsamość = **nazwa +
   ref do katalogu wsadowego + link do strony** (brak idealnego kodu/Optimy). Kategoria z reguł typu (TYPE_RULES).
-- Zaimportowane jako **7 usuwalnych źródeł** (`source='catalog'`): meble 2026 (125), łóżka 37, sofy/narożniki 37,
-  krzesła 17, stoły/stoliki 15, meble skrzyniowe 15, fotele 14 = **260 produktów**. Strony katalogów wyrenderowane do
+- Zaimportowane jako **6 usuwalnych źródeł tematycznych** (`source='catalog'`): łóżka 37, sofy/narożniki 37,
+  krzesła 17, stoły/stoliki 15, meble skrzyniowe 15, fotele 14 = **135 produktów**. Strony katalogów wyrenderowane do
   JPEG w S3 (`catalogs/maxliving-*/pages/`) + PDF-y w S3 → szybki link „otwórz stronę".
-- ✅ Weryfikacja (audyt): baza **1908 produktów / 4935 zdjęć z embeddingiem**; kadr fotela → kategoria `fotel` → produkty
-  MAXLIVING z linkiem do strony; 0 błędów/duplikatów w imporcie.
+- **Dedup katalogu zbiorczego:** początkowo zaimportowano też „MAXLIVING — meble 2026" (125) — okazał się **katalogiem
+  zbiorczym powielającym tematyczne** (116/117 nazw wspólnych; tematyczne = nadzbiór, 12 nazw unikalnych + czystsza
+  kategoryzacja, bez generycznej `mebel`). Usunięty (`DELETE /catalogs/{id}`, kaskada). **Zasada: przy imporcie z MAXLIVING
+  bierzemy katalogi tematyczne, NIE zbiorczy.**
+- ✅ Weryfikacja: kadr fotela → kategoria `fotel` → produkty MAXLIVING z linkiem do strony; 0 błędów/duplikatów.
 
-**Stan bazy po Fazach 10–11:** 1908 produktów, 4935 zdjęć (100% z embeddingiem), 9 źródeł — web (maxfliz): oświetlenie 869 +
-łazienka 779; catalog (MAXLIVING): 260 (7 katalogów).
+**Stan bazy po Fazach 10–11:** **1783 produkty, 4743 zdjęcia (100% z embeddingiem), 8 źródeł** — web (maxfliz): oświetlenie 869 +
+łazienka 779; catalog (MAXLIVING): 135 (6 katalogów tematycznych).
 
 ---
 

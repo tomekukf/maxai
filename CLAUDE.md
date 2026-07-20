@@ -101,9 +101,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ **Paginacja katalogu (wdrożona, poza numeracją faz).** `GET /products` z `limit`/`offset` + `total`, filtry server-side
   (`q`, `category`, `source`) + tryb `slim` (bez presignów, do statystyk); presign tylko widocznej strony. `CatalogPage` „Pokaż więcej"
   + wyszukiwarka/kategoria po stronie serwera (koniec ładowania 1908 rekordów naraz); `StatsPage` skanuje bazę w trybie `slim`.
-- 🎉 **Import danych — stan bazy: 1908 produktów, 4935 zdjęć (wszystkie z embeddingiem), 9 usuwalnych źródeł.**
-  web (maxfliz): oświetlenie 869 + łazienka 779. catalog (MAXLIVING, 7 katalogów wewn.): 260 (meble 2026 125, łóżka 37,
+- 🎉 **Import danych — stan bazy: 1783 produkty, 4743 zdjęcia (wszystkie z embeddingiem), 8 usuwalnych źródeł.**
+  web (maxfliz): oświetlenie 869 + łazienka 779. catalog (MAXLIVING, 6 katalogów tematycznych): 135 (łóżka 37,
   sofy/narożniki 37, krzesła 17, stoły/stoliki 15, skrzyniowe 15, fotele 14). Każde źródło z linkiem do strony katalogu (JPEG w S3).
+  **Uwaga:** zbiorczy katalog „MAXLIVING — meble 2026" (125) usunięty jako duplikat tematycznych (116/117 nazw się pokrywało;
+  tematyczne to nadzbiór z czystszą kategoryzacją per temat — zniknęła generyczna kat. `mebel`).
 - 📐 **Faza 11 — źródła jako usuwalne partie + import/analiza z GUI (zaplanowana).** 11.1 dane jako „źródło"
   (`catalogs`+`source`, `DELETE /catalogs/{id}` kaskada → łatwe wipe & re-import, lista źródeł w GUI). 11.2 dedykowany
   import + instrukcja w GUI. 11.3 **onboarding PDF = instrukcja w GUI** (Dokumentacja) + wiedza w kontekście Claude +
