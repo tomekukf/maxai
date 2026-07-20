@@ -180,16 +180,23 @@ export default function SearchPage() {
     runDetect();
   }
 
-  // Zaznacz/odznacz wykryty produkt do wyszukiwania wsadowego.
+  // Klik w produkt: zaznacz do wyszukania ORAZ wczytaj jego proponowaną ramkę jako ruchomy kadr
+  // (jeden, przesuwalny obszar — bez „dwóch zaznaczeń"). Ponowny klik odznacza i czyści kadr.
   function toggleSelect(i: number) {
-    setSelected((s) => {
-      const n = new Set(s);
-      n.has(i) ? n.delete(i) : n.add(i);
-      return n;
-    });
+    if (selected.has(i)) {
+      setSelected((s) => {
+        const n = new Set(s);
+        n.delete(i);
+        return n;
+      });
+      if (activeItem === i) clearCrop();
+    } else {
+      setSelected((s) => new Set(s).add(i));
+      loadIntoCrop(i);
+    }
   }
 
-  // „Popraw kadr" — wczytaj ramkę wykrytego produktu do edytowalnego kadru (precyzyjny, pojedynczy przypadek).
+  // Wczytaj ramkę wykrytego produktu do edytowalnego (ruchomego) kadru. Nakładkę tego produktu chowamy.
   function loadIntoCrop(i: number) {
     const image = imgRef.current;
     if (!image) return;
@@ -199,6 +206,18 @@ export default function SearchPage() {
     setManualHint(items[i].label); // podpowiedź prefill z etykiety detekcji
     setCrop(c);
     setCompletedCrop(c);
+  }
+
+  function clearCrop() {
+    setActiveItem(null);
+    setCrop(undefined);
+    setCompletedCrop(null);
+    setManualHint('');
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+    clearCrop();
   }
 
   // Wycinek base64 z boxa znormalizowanego (0-1) — w rozdzielczości oryginału.
@@ -215,8 +234,14 @@ export default function SearchPage() {
     }
     setMsg(null);
     const idxs = [...selected].sort((a, b) => a - b);
+    const useMoved = activeItem != null && completedCrop != null && completedCrop.width >= 5 && completedCrop.height >= 5;
+    const sx = image.naturalWidth / image.width;
+    const sy = image.naturalHeight / image.height;
     const newGroups: SearchGroup[] = idxs.map((i, n) => {
-      const b64 = cropBox(image, items[i].box);
+      // Dla przesuniętego (aktywnego) produktu użyj ruchomego kadru; dla reszty automatycznej ramki detekcji.
+      const b64 = (i === activeItem && useMoved && completedCrop)
+        ? cropToBase64(image, completedCrop.x * sx, completedCrop.y * sy, completedCrop.width * sx, completedCrop.height * sy)
+        : cropBox(image, items[i].box);
       return {
         key: `d${i}`,
         label: `${numBadge(n + 1)} ${items[i].label}`,
@@ -359,42 +384,32 @@ export default function SearchPage() {
               {items.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2">
                   {items.map((it, i) => (
-                    <span
+                    <button
                       key={i}
+                      onClick={() => toggleSelect(i)}
+                      title="Kliknij: wczytaj proponowaną ramkę (ruchomą) i zaznacz do wyszukania"
                       className={
                         'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ' +
-                        (selected.has(i) ? 'border-brand bg-brand text-white' : 'border-slate-300 hover:bg-slate-100') +
-                        (activeItem === i ? ' ring-2 ring-accent' : '')
+                        (selected.has(i) ? 'border-brand bg-brand text-white' : 'border-slate-300 hover:bg-slate-100')
                       }
                     >
-                      <button onClick={() => toggleSelect(i)} className="flex items-center gap-1" title="Zaznacz do wyszukania">
-                        <span className="font-semibold">{numBadge(i + 1)}</span>
-                        {it.label}
-                      </button>
-                      <button
-                        onClick={() => loadIntoCrop(i)}
-                        title="Wczytaj ramkę do ręcznej korekty"
-                        className={'ml-1 rounded px-1 ' + (selected.has(i) ? 'text-white/80 hover:bg-white/20' : 'text-slate-400 hover:bg-slate-200')}
-                      >
-                        ✎
-                      </button>
-                    </span>
+                      <span className="font-semibold">{numBadge(i + 1)}</span>
+                      {it.label}
+                    </button>
                   ))}
                   {items.length > 1 && (
                     <button
-                      onClick={() => setSelected((s) => (s.size === items.length ? new Set() : new Set(items.map((_, i) => i))))}
+                      onClick={() => (selected.size ? clearSelection() : setSelected(new Set(items.map((_, i) => i))))}
                       className="text-xs text-blue-700 hover:underline"
                     >
-                      {selected.size === items.length ? 'Odznacz wszystkie' : 'Zaznacz wszystkie'}
+                      {selected.size ? 'Wyczyść zaznaczenie' : 'Zaznacz wszystkie'}
                     </button>
                   )}
                 </div>
               )}
               <p className="text-xs text-slate-500">
-                <b>Szybko:</b> zaznacz produkty na liście → „Szukaj zaznaczonych" (używa <b>automatycznych</b> ramek, kropkowanych na obrazie).
-                <br />
-                <b>Precyzyjnie:</b> narysuj/popraw ramkę myszą na obrazie (albo wczytaj ikoną ✎) → „Szukaj tego kadru".
-                Kropkowane ramki to tylko podpowiedź — kadr rysujesz i przesuwasz swobodnie.
+                Kliknij produkt → jego proponowana ramka pojawi się jako <b>ruchomy kadr</b> (przesuń/popraw myszą), potem „Szukaj tego kadru".
+                Zaznacz kilka produktów → „Szukaj zaznaczonych" da osobną listę dla każdego. Kropkowane ramki to tylko podpowiedzi.
               </p>
             </div>
 
@@ -409,24 +424,26 @@ export default function SearchPage() {
                   style={{ maxWidth: DISPLAY_MAX, display: 'block' }}
                 />
               </ReactCrop>
-              {/* Nakładka = tylko PODPOWIEDŹ (nieklikana, przerywana), żeby nie mylić z kadrem i nie blokować przeciągania. */}
+              {/* Nakładka = tylko PODPOWIEDŹ (nieklikana, przerywana). Aktywny produkt pokazujemy jako ruchomy kadr, nie tu. */}
               <div className="pointer-events-none absolute inset-0">
-                {items.map((it, i) => (
-                  <div
-                    key={i}
-                    className={'absolute border border-dashed ' + (selected.has(i) ? 'border-brand' : 'border-white/80')}
-                    style={{ left: `${it.box.x * 100}%`, top: `${it.box.y * 100}%`, width: `${it.box.w * 100}%`, height: `${it.box.h * 100}%` }}
-                  >
-                    <span
-                      className={
-                        'absolute -left-0.5 -top-3 rounded px-1 text-[11px] font-bold shadow ' +
-                        (selected.has(i) ? 'bg-brand text-white' : 'bg-white/90 text-slate-700')
-                      }
+                {items.map((it, i) =>
+                  i === activeItem ? null : (
+                    <div
+                      key={i}
+                      className={'absolute border border-dashed ' + (selected.has(i) ? 'border-brand' : 'border-white/80')}
+                      style={{ left: `${it.box.x * 100}%`, top: `${it.box.y * 100}%`, width: `${it.box.w * 100}%`, height: `${it.box.h * 100}%` }}
                     >
-                      {i + 1}
-                    </span>
-                  </div>
-                ))}
+                      <span
+                        className={
+                          'absolute -left-0.5 -top-3 rounded px-1 text-[11px] font-bold shadow ' +
+                          (selected.has(i) ? 'bg-brand text-white' : 'bg-white/90 text-slate-700')
+                        }
+                      >
+                        {i + 1}
+                      </span>
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 
