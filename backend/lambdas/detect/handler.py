@@ -16,9 +16,14 @@ bedrock = boto3.client(
 MODEL_ID = os.environ["DETECT_MODEL_ID"]  # eu.anthropic.claude-haiku-4-5-...
 
 SYSTEM = (
-    "Analizujesz obraz (wizualizacja wnętrza lub zdjęcie). Zidentyfikuj widoczne MEBLE/PRODUKTY "
-    "(np. sofa, narożnik, fotel, stół, krzesło, lampa, komoda, dywan, regał). "
-    "Dla każdego podaj krótką etykietę po polsku (typ + ew. kolor/cecha) oraz przybliżony bounding box "
+    "Analizujesz obraz (wizualizacja wnętrza lub zdjęcie). Zidentyfikuj widoczne PRODUKTY WYPOSAŻENIA WNĘTRZ. "
+    "Interesują nas kategorie, które sprzedaje salon: "
+    "MEBLE (sofa, narożnik, fotel, krzesło, stół, stolik, ława, łóżko, komoda, szafka, regał, materac); "
+    "OŚWIETLENIE (lampa wisząca, żyrandol, kinkiet, plafon, lampa stołowa/podłogowa, oczko/spot, taśma LED); "
+    "ŁAZIENKA (wanna, umywalka, bateria, kabina prysznicowa, brodzik, WC, bidet, grzejnik łazienkowy); "
+    "WYKOŃCZENIE (płytki ścienne/podłogowe, panele/podłoga, tapeta, sztukateria, listwy, drzwi, lustro, dywan). "
+    "Ignoruj drobiazgi dekoracyjne (rośliny, książki, świece, obrazy, tekstylia) i elementy budowlane (okna, ściany). "
+    "Dla każdego podaj krótką etykietę po polsku (typ + ew. kolor/materiał) oraz przybliżony bounding box "
     "znormalizowany do 0-1: x,y = lewy górny róg, w,h = szerokość/wysokość (ułamki wymiarów obrazu). "
     'Zwróć WYŁĄCZNIE JSON: {"items":[{"label":"...","box":{"x":0.0,"y":0.0,"w":0.0,"h":0.0}}]}. '
     "Bez markdown, bez komentarzy. Gdy brak mebli — pusta lista. Maksymalnie 10 obiektów."

@@ -1,8 +1,37 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { searchByImage, detectItems, type SearchResult, type DetectedItem } from '../lib/api';
+import { searchByImage, detectItems, getCategories, type SearchResult, type DetectedItem } from '../lib/api';
+
+// Mapowanie swobodnej etykiety detekcji (PL) na kanoniczną kategorię bazy.
+const LABEL_CAT: [RegExp, string][] = [
+  [/naroż|naroz/, 'naroznik'],
+  [/sofa|kanap/, 'sofa'],
+  [/fotel/, 'fotel'],
+  [/krzes/, 'krzeslo'],
+  [/stolik|ława|lawa|kawow/, 'stolik'],
+  [/stół|stol\b|stoł/, 'stol'],
+  [/łóż|loz|lóz/, 'lozko'],
+  [/materac/, 'materac'],
+  [/komod/, 'komoda'],
+  [/szaf|nocn/, 'szafka'],
+  [/lamp|żyrand|zyrand|kinkiet|plafon|oświet|oswiet|spot|oczk|żarów|reflektor|taśm|tasm/, 'oswietlenie'],
+  [/wann|umywal|bateri|prysznic|kabin|brodzik|\bwc\b|bidet|toalet|grzejnik/, 'lazienka'],
+  [/płytk|plytk|kafel/, 'plytki'],
+  [/podłog|podlog|panel|deska/, 'podlogi'],
+  [/tapet/, 'tapety'],
+  [/dywan/, 'dywan'],
+  [/drzwi/, 'drzwi'],
+  [/lustr/, 'lustro'],
+  [/sztukater|listw|rozet/, 'sztukateria'],
+  [/regał|regal|witryn|mebl|komoda|szafk/, 'mebel'],
+];
+function labelToCategory(label: string): string | null {
+  const s = label.toLowerCase();
+  for (const [re, cat] of LABEL_CAT) if (re.test(s)) return cat;
+  return null;
+}
 import { loadSession, isAdmin } from '../lib/auth';
 import { useShortlist, toggleShortlist } from '../lib/shortlist';
 
@@ -42,6 +71,8 @@ export default function SearchPage() {
   const [pageImg, setPageImg] = useState<string | null>(null);
 
   const [items, setItems] = useState<DetectedItem[]>([]);
+  const [hiddenCount, setHiddenCount] = useState(0); // odfiltrowane (kategoria spoza bazy)
+  const [dbCats, setDbCats] = useState<Set<string> | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [activeItem, setActiveItem] = useState<number | null>(null);
 
@@ -63,8 +94,14 @@ export default function SearchPage() {
   const imgRef = useRef<HTMLImageElement>(null);
   const lastB64 = useRef<string | null>(null);
 
+  // Kategorie obecne w bazie — do filtrowania podpowiedzi detekcji (nie proponuj czego nie mamy).
+  useEffect(() => {
+    getCategories().then((cs) => setDbCats(new Set(cs.map((c) => c.category)))).catch(() => {});
+  }, []);
+
   function resetForNewImage() {
     setItems([]);
+    setHiddenCount(0);
     setActiveItem(null);
     setCrop(undefined);
     setCompletedCrop(null);
@@ -109,8 +146,17 @@ export default function SearchPage() {
     setMsg(null);
     try {
       const its = await detectItems(full);
-      setItems(its);
-      if (!its.length) setMsg('Model nie wykrył mebli — zaznacz mebel ręcznie.');
+      // Zostaw tylko podpowiedzi z kategorii obecnych w bazie (nieznane mapowanie → zostawiamy).
+      const visible = dbCats
+        ? its.filter((it) => { const c = labelToCategory(it.label); return !c || dbCats.has(c); })
+        : its;
+      setItems(visible);
+      setHiddenCount(its.length - visible.length);
+      if (!visible.length) {
+        setMsg(its.length
+          ? 'Wykryte elementy są spoza naszego asortymentu — zaznacz produkt ręcznie.'
+          : 'Model nie wykrył produktów — zaznacz produkt ręcznie.');
+      }
     } catch (e) {
       setMsg(`Błąd detekcji: ${(e as Error).message}`);
     } finally {
@@ -252,7 +298,12 @@ export default function SearchPage() {
             {/* podpowiedzi wykrytych mebli */}
             <div className="space-y-1">
               <div className="text-sm font-medium">
-                Wykryte meble {detecting && <span className="text-slate-400">(analizuję…)</span>}
+                Wykryte produkty {detecting && <span className="text-slate-400">(analizuję…)</span>}
+                {hiddenCount > 0 && (
+                  <span className="ml-1 font-normal text-slate-400">
+                    ({hiddenCount} spoza asortymentu pominięto)
+                  </span>
+                )}
               </div>
               {items.length > 0 && (
                 <div className="flex flex-wrap gap-2">

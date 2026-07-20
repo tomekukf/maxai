@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   listProducts,
+  getCategories,
   deleteProduct,
   deleteAllProducts,
   getProduct,
@@ -9,53 +10,67 @@ import {
   type ProductDetail,
   type ProductImage,
   type ProductPatch,
+  type CategoryCount,
 } from '../lib/api';
 import { useShortlist, toggleShortlist } from '../lib/shortlist';
 
 const btn = 'rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50';
+const PAGE = 60;
 
 export default function CatalogPage({ admin = false }: { admin?: boolean }) {
   const [items, setItems] = useState<Product[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
   const [sub, setSub] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryCount[]>([]);
+  const reqId = useRef(0); // odrzucanie spóźnionych odpowiedzi (race przy szybkim pisaniu)
 
-  function load() {
+  // Pełna lista kategorii z bazy (nie tylko z załadowanej strony).
+  useEffect(() => {
+    getCategories().then(setCategories).catch(() => {});
+  }, []);
+
+  // Pobranie strony wyników (server-side: q + kategoria). reset=true → od nowa; inaczej dopisz.
+  async function fetchPage(reset: boolean) {
+    const my = ++reqId.current;
+    reset ? setBusy(true) : setLoadingMore(true);
     setErr(null);
-    listProducts()
-      .then(setItems)
-      .catch((e) => setErr((e as Error).message));
+    try {
+      const offset = reset ? 0 : items?.length ?? 0;
+      const page = await listProducts({ q: q.trim(), category: cat, limit: PAGE, offset });
+      if (my !== reqId.current) return; // przyszła nowsza odpowiedź
+      setTotal(page.total);
+      setItems((cur) => (reset || !cur ? page.items : [...cur, ...page.items]));
+    } catch (e) {
+      if (my === reqId.current) setErr((e as Error).message);
+    } finally {
+      if (my === reqId.current) { setBusy(false); setLoadingMore(false); }
+    }
   }
-  useEffect(load, []);
+  const load = () => fetchPage(true);
 
-  const categories = useMemo(
-    () => [...new Set((items ?? []).map((p) => p.category).filter(Boolean))] as string[],
+  // Debounce wyszukiwania + reakcja na zmianę kategorii → ładuj od nowa.
+  useEffect(() => {
+    const t = setTimeout(() => fetchPage(true), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, cat]);
+
+  // Podtyp filtrujemy po stronie klienta (na załadowanych rekordach).
+  const subtypes = useMemo(
+    () => [...new Set((items ?? []).map((p) => p.subtype).filter(Boolean))] as string[],
     [items],
   );
-  const subtypes = useMemo(
-    () =>
-      [...new Set((items ?? []).filter((p) => !cat || p.category === cat).map((p) => p.subtype).filter(Boolean))] as string[],
-    [items, cat],
-  );
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (items ?? []).filter((p) => {
-      if (cat && p.category !== cat) return false;
-      if (sub && p.subtype !== sub) return false;
-      if (!needle) return true;
-      const code = String((p.params?.codes as string[] | undefined)?.join(' ') ?? p.manufacturerCode ?? '');
-      return (
-        (p.name ?? '').toLowerCase().includes(needle) ||
-        (p.optimaId ?? '').toLowerCase().includes(needle) ||
-        code.toLowerCase().includes(needle) ||
-        (p.subtype ?? '').toLowerCase().includes(needle)
-      );
-    });
-  }, [items, q, cat, sub]);
+  const filtered = useMemo(
+    () => (items ?? []).filter((p) => !sub || p.subtype === sub),
+    [items, sub],
+  );
 
   // Zwijanie wariantów tego samego produktu (group_id) w jedną kafelkę.
   const grouped = useMemo(() => {
@@ -128,6 +143,7 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
     try {
       await deleteProduct(id);
       setItems((cur) => (cur ? cur.filter((p) => p.id !== id) : cur));
+      setTotal((t) => Math.max(0, t - 1));
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -142,6 +158,7 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
       const { deleted } = await deleteAllProducts();
       alert(`Usunięto ${deleted} produktów.`);
       setItems([]);
+      setTotal(0);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -155,7 +172,7 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
         <div className="flex flex-wrap items-center gap-3">
           <div>
             <h2 className="text-lg font-semibold">
-              Katalog produktów {items && `(${filtered.length}/${items.length})`}
+              Katalog produktów {items && `(załadowano ${filtered.length} z ${total})`}
             </h2>
             <p className="text-sm text-slate-500">Szukaj, filtruj, kliknij produkt po szczegóły i edycję.</p>
           </div>
@@ -181,8 +198,8 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
             className="min-w-[220px] flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
           />
           <select value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className="rounded border border-slate-300 px-2 py-1.5 text-sm">
-            <option value="">— kategoria —</option>
-            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            <option value="">— kategoria (wszystkie) —</option>
+            {categories.map((c) => <option key={c.category} value={c.category}>{c.category} ({c.count})</option>)}
           </select>
           <select value={sub} onChange={(e) => setSub(e.target.value)} className="rounded border border-slate-300 px-2 py-1.5 text-sm">
             <option value="">— podtyp —</option>
@@ -278,6 +295,17 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
               );
             })}
           </div>
+        )}
+
+        {items && items.length < total && (
+          <div className="flex justify-center pt-2">
+            <button onClick={() => fetchPage(false)} disabled={loadingMore || busy} className={btn}>
+              {loadingMore ? 'Ładuję…' : `Pokaż więcej (${items.length} z ${total})`}
+            </button>
+          </div>
+        )}
+        {items && items.length === 0 && !busy && (
+          <div className="py-8 text-center text-sm text-slate-400">Brak produktów dla tych filtrów.</div>
         )}
       </main>
 

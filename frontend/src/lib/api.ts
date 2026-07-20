@@ -250,11 +250,48 @@ export type ProductPatch = Partial<{
   params: Record<string, unknown>;
 }>;
 
-export async function listProducts(): Promise<Product[]> {
-  const r = await fetch(`${API_URL}/products`, { method: 'GET' });
+export type ProductQuery = {
+  q?: string;
+  category?: string;
+  source?: string;
+  limit?: number;
+  offset?: number;
+  slim?: boolean; // bez presignów (statystyki)
+};
+
+export type ProductPage = {
+  items: Product[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function listProducts(query: ProductQuery = {}): Promise<ProductPage> {
+  const p = new URLSearchParams();
+  if (query.q) p.set('q', query.q);
+  if (query.category) p.set('category', query.category);
+  if (query.source) p.set('source', query.source);
+  if (query.slim) p.set('slim', '1');
+  p.set('limit', String(query.limit ?? 60));
+  p.set('offset', String(query.offset ?? 0));
+  const r = await fetch(`${API_URL}/products?${p.toString()}`, { method: 'GET' });
   if (!r.ok) throw new Error(`products list: ${r.status}`);
   const data = await r.json();
-  return (data.items ?? []) as Product[];
+  return {
+    items: (data.items ?? []) as Product[],
+    total: Number(data.total ?? (data.items?.length ?? 0)),
+    limit: Number(data.limit ?? query.limit ?? 60),
+    offset: Number(data.offset ?? query.offset ?? 0),
+  };
+}
+
+export type CategoryCount = { category: string; count: number };
+
+export async function getCategories(): Promise<CategoryCount[]> {
+  const r = await fetch(`${API_URL}/categories`, { method: 'GET' });
+  if (!r.ok) throw new Error(`categories: ${r.status}`);
+  const data = await r.json();
+  return (data.items ?? []) as CategoryCount[];
 }
 
 export async function getProduct(id: string): Promise<ProductDetail> {

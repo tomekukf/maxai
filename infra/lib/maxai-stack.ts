@@ -211,6 +211,7 @@ export class MaxaiStack extends Stack {
     // Uwaga: zachowujemy nazwę zmiennej {optimaId} (rename na {id} powoduje konflikt route'ów).
     httpApi.addRoutes({ path: '/products', methods: [HttpMethod.GET], integration: productsInteg });
     httpApi.addRoutes({ path: '/products/{optimaId}', methods: [HttpMethod.GET], integration: productsInteg });
+    httpApi.addRoutes({ path: '/categories', methods: [HttpMethod.GET], integration: productsInteg });
     httpApi.addRoutes({ path: '/catalogs', methods: [HttpMethod.GET], integration: productsInteg });
     httpApi.addRoutes({ path: '/catalogs/{id}/export', methods: [HttpMethod.GET], integration: productsInteg });
     // Operacje admina (token + grupa 'admin').

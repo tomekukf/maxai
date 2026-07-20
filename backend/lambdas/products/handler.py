@@ -266,33 +266,73 @@ def _page_image_url(pdf_s3_url, catalog_page):
     return _presign_get(f"{prefix}/pages/p{int(catalog_page) - 1}.jpg")
 
 
-def _list():
+def _categories():
+    rows = _db().run("SELECT category, count(*) n FROM products WHERE category IS NOT NULL GROUP BY category ORDER BY n DESC")
+    return _resp(200, {"items": [{"category": c, "count": int(n)} for c, n in rows]})
+
+
+def _list(qs):
+    qs = qs or {}
+    try:
+        limit = max(1, min(int(qs.get("limit", 60)), 200))
+        offset = max(0, int(qs.get("offset", 0)))
+    except (TypeError, ValueError):
+        limit, offset = 60, 0
+    q = (qs.get("q") or "").strip()
+    category = qs.get("category") or None
+    source = qs.get("source") or None
+    slim = str(qs.get("slim") or "").lower() in ("1", "true", "yes")  # bez presignów (statystyki)
+
+    where, kw = [], {}
+    if category:
+        where.append("p.category = :cat")
+        kw["cat"] = category
+    if source:
+        where.append("p.source = :src")
+        kw["src"] = source
+    if q:
+        # jeden named-param :q (pg8000 nie lubi powtórzeń) — łączymy pola w jedno wyrażenie
+        where.append(
+            "((p.name || ' ' || coalesce(p.manufacturer_code,'') || ' ' || coalesce(p.optima_id,'') "
+            "|| ' ' || coalesce(p.params->>'sku','') || ' ' || coalesce(p.subtype,'')) ILIKE :q)"
+        )
+        kw["q"] = f"%{q}%"
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    total = int(_db().run(f"SELECT count(*) FROM products p {where_sql}", **kw)[0][0])
+
+    if slim:
+        rows = _db().run(
+            "SELECT p.id, p.optima_id, p.name, p.source, p.category, p.subtype, p.manufacturer_code, "
+            "(SELECT count(*) FROM product_images pi WHERE pi.product_id = p.id) AS image_count "
+            f"FROM products p {where_sql} ORDER BY p.created_at DESC LIMIT {limit} OFFSET {offset}",
+            **kw,
+        )
+        items = [
+            {"id": str(pid), "optimaId": oid, "name": name, "source": src, "category": cat_,
+             "subtype": sub, "manufacturerCode": code, "imageUrl": None, "imageCount": int(ic)}
+            for pid, oid, name, src, cat_, sub, code, ic in rows
+        ]
+        return _resp(200, {"items": items, "total": total, "limit": limit, "offset": offset})
+
     rows = _db().run(
         "SELECT p.id, p.optima_id, p.name, p.params, p.source, p.category, p.subtype, p.manufacturer_code, "
         "p.group_id, "
         "(SELECT image_s3_url FROM product_images pi WHERE pi.product_id = p.id "
         " ORDER BY sort_order, created_at LIMIT 1) AS primary_image, "
         "(SELECT count(*) FROM product_images pi WHERE pi.product_id = p.id) AS image_count "
-        "FROM products p ORDER BY p.created_at DESC"
+        f"FROM products p {where_sql} ORDER BY p.created_at DESC LIMIT {limit} OFFSET {offset}",
+        **kw,
     )
-    items = []
-    for pid, optima_id, name, params, source, category, subtype, mfr_code, group_id, primary_image, image_count in rows:
-        items.append(
-            {
-                "id": str(pid),
-                "optimaId": optima_id,
-                "name": name,
-                "params": params,
-                "source": source,
-                "category": category,
-                "subtype": subtype,
-                "manufacturerCode": mfr_code,
-                "groupId": group_id,
-                "imageUrl": _presign_get(primary_image) if primary_image else None,
-                "imageCount": int(image_count),
-            }
-        )
-    return _resp(200, {"items": items})
+    items = [
+        {
+            "id": str(pid), "optimaId": optima_id, "name": name, "params": params, "source": source,
+            "category": category_, "subtype": subtype, "manufacturerCode": mfr_code, "groupId": group_id,
+            "imageUrl": _presign_get(primary_image) if primary_image else None, "imageCount": int(image_count),
+        }
+        for pid, optima_id, name, params, source, category_, subtype, mfr_code, group_id, primary_image, image_count in rows
+    ]
+    return _resp(200, {"items": items, "total": total, "limit": limit, "offset": offset})
 
 
 def _detail(pid):
@@ -531,9 +571,14 @@ def lambda_handler(event, _ctx):
             return _with_retry(lambda: _catalog_create(body))
         return _resp(405, {"error": "Metoda nieobsługiwana"})
 
+    # --- kategorie ---
+    if path.startswith("/categories") and method == "GET":
+        return _with_retry(_categories)
+
     # --- produkty ---
     if method == "GET":
-        return _with_retry((lambda: _detail(pid)) if pid else _list)
+        qs = event.get("queryStringParameters") or {}
+        return _with_retry((lambda: _detail(pid)) if pid else (lambda: _list(qs)))
     if method == "DELETE":
         return _with_retry((lambda: _delete_by_id(pid)) if pid else _delete_all)
     try:

@@ -15,7 +15,22 @@ export default function StatsPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    listProducts().then(setItems).catch((e) => setErr((e as Error).message));
+    (async () => {
+      try {
+        const all: Product[] = [];
+        let offset = 0;
+        // Pełny skan w trybie slim (bez presignów) — statystyki liczymy z całej bazy.
+        for (;;) {
+          const page = await listProducts({ slim: true, limit: 200, offset });
+          all.push(...page.items);
+          offset += page.items.length;
+          if (offset >= page.total || page.items.length === 0) break;
+        }
+        setItems(all);
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+    })();
   }, []);
 
   if (err) return <Wrap><div className="text-sm text-red-700">Błąd: {err}</div></Wrap>;
