@@ -176,6 +176,7 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ProductPatch>({});
   const [paramsText, setParamsText] = useState('');
+  const [zoom, setZoom] = useState<string | null>(null); // powiększone zdjęcie (lightbox)
 
   useEffect(() => {
     getProduct(id)
@@ -207,6 +208,7 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
       <div className="my-8 w-full max-w-2xl rounded-lg bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
@@ -221,7 +223,14 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
           <div className="space-y-4">
             <div className="flex gap-2 overflow-x-auto">
               {d.images.map((im, i) => (
-                <img key={i} src={im.imageUrl} alt="" className="h-32 w-32 flex-none rounded border bg-slate-50 object-contain" />
+                <img
+                  key={i}
+                  src={im.imageUrl}
+                  alt=""
+                  onClick={() => setZoom(im.imageUrl)}
+                  title="Kliknij, aby powiększyć"
+                  className="h-32 w-32 flex-none cursor-zoom-in rounded border bg-slate-50 object-contain hover:ring-2 hover:ring-slate-400"
+                />
               ))}
             </div>
 
@@ -278,6 +287,16 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
         )}
       </div>
     </div>
+    {zoom && (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+        onClick={() => setZoom(null)}
+        title="Kliknij, aby zamknąć"
+      >
+        <img src={zoom} alt="" className="max-h-full max-w-full cursor-zoom-out object-contain" />
+      </div>
+    )}
+    </>
   );
 }
 
