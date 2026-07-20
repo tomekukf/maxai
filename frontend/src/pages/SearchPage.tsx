@@ -3,6 +3,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { searchByImage, detectItems, type SearchResult, type DetectedItem } from '../lib/api';
+import { loadSession, isAdmin } from '../lib/auth';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -47,7 +48,12 @@ export default function SearchPage() {
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [queryAttrs, setQueryAttrs] = useState<Record<string, unknown> | null>(null);
+  const [queryCategory, setQueryCategory] = useState<string | null>(null);
+  const [queryImg, setQueryImg] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
+  const [admin] = useState(() => isAdmin(loadSession()));
+  const [diag, setDiag] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -63,6 +69,8 @@ export default function SearchPage() {
     setCompletedCrop(null);
     setResults(null);
     setQueryAttrs(null);
+    setQueryCategory(null);
+    setQueryImg(null);
     lastB64.current = null;
     setMsg(null);
   }
@@ -150,6 +158,7 @@ export default function SearchPage() {
       return;
     }
     lastB64.current = b64;
+    setQueryImg('data:image/jpeg;base64,' + b64);
     await runSearch(b64, 3, false);
   }
 
@@ -160,6 +169,7 @@ export default function SearchPage() {
       const res = await searchByImage(b64, k);
       setResults(res.results);
       setQueryAttrs(res.queryAttributes ?? null);
+      setQueryCategory(res.queryCategory ?? null);
       if (!res.results.length) setMsg('Brak dobrego dopasowania w bazie (nic wystarczająco podobnego).');
     } catch (e) {
       setMsg(`Błąd wyszukiwania: ${(e as Error).message}`);
@@ -289,7 +299,17 @@ export default function SearchPage() {
 
         {results && results.length > 0 && (
           <div className="space-y-2">
-            <h3 className="font-medium">Propozycje ({results.length})</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-medium">Propozycje ({results.length})</h3>
+              {admin && (
+                <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
+                  {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
+                </button>
+              )}
+            </div>
+            {admin && diag && (
+              <DiagPanel queryImg={queryImg} category={queryCategory} attrs={queryAttrs} results={results} />
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {results.map((r, i) => (
                 <ResultCard key={i} r={r} rank={i + 1} queryAttrs={queryAttrs} />
@@ -303,6 +323,84 @@ export default function SearchPage() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function DiagPanel({
+  queryImg,
+  category,
+  attrs,
+  results,
+}: {
+  queryImg: string | null;
+  category: string | null;
+  attrs: Record<string, unknown> | null;
+  results: SearchResult[];
+}) {
+  const a = attrs ?? {};
+  const key = (k: string) => (a[k] != null && a[k] !== '' ? (Array.isArray(a[k]) ? (a[k] as unknown[]).join(', ') : String(a[k])) : '—');
+  return (
+    <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs">
+      <div className="font-medium text-amber-800">🔬 Diagnostyka wyszukiwania (widoczne tylko dla admina)</div>
+
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <div className="mb-1 text-slate-500">Obraz zapytania (wysłany do modelu):</div>
+          {queryImg ? (
+            <img src={queryImg} alt="wycinek zapytania" className="max-h-40 rounded border bg-white object-contain" />
+          ) : (
+            <div className="text-slate-400">—</div>
+          )}
+        </div>
+        <div className="min-w-[240px] flex-1">
+          <div className="mb-1 text-slate-500">
+            Bramka kategorii: <span className="font-medium text-slate-800">{category ?? '— (brak, bez filtra)'}</span>
+          </div>
+          <div className="text-slate-500">Jak LLM (Sonnet) opisał wycinek:</div>
+          <dl className="grid grid-cols-2 gap-x-3">
+            {['kategoria', 'subtype', 'typ', 'kolor_dominujacy', 'material', 'styl', 'ksztalt_ogolny'].map((k) => (
+              <div key={k} className="flex justify-between border-b border-amber-200/60 py-0.5">
+                <dt className="text-slate-500">{k}</dt>
+                <dd className="ml-2 truncate font-medium">{key(k)}</dd>
+              </div>
+            ))}
+          </dl>
+          {a['opis_swobodny'] ? <div className="mt-1 italic text-slate-600">„{String(a['opis_swobodny'])}"</div> : null}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 text-slate-500">Co wpłynęło na wynik (per kandydat):</div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-slate-400">
+                <th className="text-left font-normal">#</th>
+                <th className="text-left font-normal">produkt</th>
+                <th className="text-left font-normal">rerank</th>
+                <th className="text-left font-normal">kosinus (Titan)</th>
+                <th className="text-left font-normal">powód (sędzia)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, i) => (
+                <tr key={i} className="border-t border-amber-200/60 align-top">
+                  <td className="pr-2">{i + 1}</td>
+                  <td className="pr-2">{r.name} <span className="text-slate-400">{(r.params?.codes as string[] | undefined)?.[0] ?? ''}</span></td>
+                  <td className="pr-2 font-medium">{r.rerankScore != null ? `${r.rerankScore}%` : '—'}</td>
+                  <td className="pr-2">{r.visualSimilarity != null ? `${(r.visualSimilarity * 100).toFixed(0)}%` : '—'}</td>
+                  <td className="text-slate-600">{r.reason ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <details className="mt-2">
+          <summary className="cursor-pointer text-slate-500">Pełny opis wycinka (JSON)</summary>
+          <pre className="mt-1 max-h-48 overflow-auto rounded bg-white p-2">{JSON.stringify(attrs, null, 2)}</pre>
+        </details>
+      </div>
     </div>
   );
 }

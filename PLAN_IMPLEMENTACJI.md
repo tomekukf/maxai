@@ -605,6 +605,13 @@ Formaty specyfikacji spójne w katalogu: `W` (moc), `lm`, `K` (barwa), `IP`, `°
   edycja tych pól (obok edycji `params` JSON). Kontekst: pojedynczy podglądany produkt.
 - ✅ Weryfikacja: admin widzi i edytuje specyfikacje/opis pojedynczego produktu; zmiana zapisuje się (`PUT`).
 
+**Krok 8.7 — Tryb diagnostyczny wyszukiwania (admin, tymczasowy)** — ✅ ZROBIONE
+- `SearchPage`: gdy zalogowany admin (sesja Cognito) → przełącznik „🔬 Tryb diagnostyczny". Panel pokazuje:
+  **obraz zapytania** (wysłany wycinek), **bramkę kategorii**, **opis wycinka przez LLM** (queryAttributes:
+  kategoria/subtype/kolor/materiał/styl/opis + pełny JSON) oraz tabelę „co wpłynęło na wynik" per kandydat
+  (rerank %, kosinus Titana, powód sędziego). Dane już zwracane przez `/search` — zmiana tylko we froncie.
+- ✅ Weryfikacja: admin widzi flow zapytania (opis LLM + wpływ na ranking); niewidoczne dla handlowca.
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)
