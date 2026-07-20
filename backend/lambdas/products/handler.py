@@ -169,6 +169,7 @@ def _create(body):
     subtype = body.get("subtype")
     catalog_id = body.get("catalogId")
     catalog_page = body.get("catalogPage")
+    group_id = body.get("groupId")
     source = body.get("source") or ("catalog" if catalog_id else "optima")
     # Opis wizualny LLM tylko gdy włączony (seed katalogu: describe=false → brak kosztu Sonnet).
     do_describe = bool(DESCRIBE_MODEL_ID) and body.get("describe", True) is not False
@@ -176,12 +177,12 @@ def _create(body):
     def insert_product():
         return _db().run(
             "INSERT INTO products (optima_id, name, params, source_url, source, category, subtype, "
-            "manufacturer, manufacturer_code, catalog_id, catalog_page) "
+            "manufacturer, manufacturer_code, catalog_id, catalog_page, group_id) "
             "VALUES (:o, :n, CAST(:p AS jsonb), :su, :src, :cat, :st, :mf, :mc, "
-            "CAST(:cid AS uuid), :cp) RETURNING id",
+            "CAST(:cid AS uuid), :cp, :gid) RETURNING id",
             o=optima_id, n=name, p=json.dumps(params, ensure_ascii=False), su=source_url,
             src=source, cat=category, st=subtype, mf=manufacturer, mc=manufacturer_code,
-            cid=catalog_id, cp=catalog_page,
+            cid=catalog_id, cp=catalog_page, gid=group_id,
         )
 
     try:
@@ -235,16 +236,25 @@ def _create(body):
     return _resp(200, {"id": pid, "images": inserted})
 
 
+def _page_image_url(pdf_s3_url, catalog_page):
+    """Lekki obraz strony katalogu zamiast całego PDF: <prefix>/pages/p{idx}.jpg (idx = strona-1)."""
+    if not pdf_s3_url or not catalog_page:
+        return None
+    prefix = pdf_s3_url.rsplit("/", 1)[0]
+    return _presign_get(f"{prefix}/pages/p{int(catalog_page) - 1}.jpg")
+
+
 def _list():
     rows = _db().run(
         "SELECT p.id, p.optima_id, p.name, p.params, p.source, p.category, p.subtype, p.manufacturer_code, "
+        "p.group_id, "
         "(SELECT image_s3_url FROM product_images pi WHERE pi.product_id = p.id "
         " ORDER BY sort_order, created_at LIMIT 1) AS primary_image, "
         "(SELECT count(*) FROM product_images pi WHERE pi.product_id = p.id) AS image_count "
         "FROM products p ORDER BY p.created_at DESC"
     )
     items = []
-    for pid, optima_id, name, params, source, category, subtype, mfr_code, primary_image, image_count in rows:
+    for pid, optima_id, name, params, source, category, subtype, mfr_code, group_id, primary_image, image_count in rows:
         items.append(
             {
                 "id": str(pid),
@@ -255,6 +265,7 @@ def _list():
                 "category": category,
                 "subtype": subtype,
                 "manufacturerCode": mfr_code,
+                "groupId": group_id,
                 "imageUrl": _presign_get(primary_image) if primary_image else None,
                 "imageCount": int(image_count),
             }
@@ -265,7 +276,7 @@ def _list():
 def _detail(pid):
     rows = _db().run(
         "SELECT p.optima_id, p.name, p.params, p.source, p.category, p.subtype, p.manufacturer, "
-        "p.manufacturer_code, p.catalog_page, c.name, c.pdf_s3_url "
+        "p.manufacturer_code, p.group_id, p.catalog_page, c.name, c.pdf_s3_url "
         "FROM products p LEFT JOIN catalogs c ON c.id = p.catalog_id "
         "WHERE p.id = CAST(:id AS uuid)",
         id=pid,
@@ -273,7 +284,7 @@ def _detail(pid):
     if not rows:
         return _resp(404, {"error": "Nie znaleziono produktu"})
     (optima_id, name, params, source, category, subtype, manufacturer, mfr_code,
-     catalog_page, catalog_name, catalog_pdf) = rows[0]
+     group_id, catalog_page, catalog_name, catalog_pdf) = rows[0]
     imgs = _db().run(
         "SELECT image_s3_url, attributes, sort_order FROM product_images "
         "WHERE product_id = CAST(:id AS uuid) ORDER BY sort_order, created_at",
@@ -283,11 +294,12 @@ def _detail(pid):
     product = {
         "id": pid, "optimaId": optima_id, "name": name, "params": params, "source": source,
         "category": category, "subtype": subtype, "manufacturer": manufacturer,
-        "manufacturerCode": mfr_code, "images": images,
+        "manufacturerCode": mfr_code, "groupId": group_id, "images": images,
     }
     if source == "catalog" and catalog_pdf:
         product["catalog"] = {
             "name": catalog_name, "page": catalog_page, "pdfUrl": _presign_get(catalog_pdf),
+            "pageImageUrl": _page_image_url(catalog_pdf, catalog_page),
         }
     return _resp(200, {"product": product})
 
@@ -296,6 +308,7 @@ def _detail(pid):
 _EDITABLE = {
     "name": "name", "optimaId": "optima_id", "category": "category", "subtype": "subtype",
     "sourceUrl": "source_url", "manufacturer": "manufacturer", "manufacturerCode": "manufacturer_code",
+    "groupId": "group_id",
 }
 
 
@@ -386,11 +399,11 @@ def _catalog_export(cid):
         return _resp(404, {"error": "Nie znaleziono katalogu"})
     name, manufacturer, domain, pdf_url, page_count = crow[0]
     prows = _db().run(
-        "SELECT id, optima_id, name, params, category, subtype, manufacturer, manufacturer_code, catalog_page "
+        "SELECT id, optima_id, name, params, category, subtype, manufacturer, manufacturer_code, catalog_page, group_id "
         "FROM products WHERE catalog_id = CAST(:id AS uuid) ORDER BY catalog_page, created_at", id=cid,
     )
     products = []
-    for (pid, optima_id, pname, params, category, subtype, mfr, mfr_code, cpage) in prows:
+    for (pid, optima_id, pname, params, category, subtype, mfr, mfr_code, cpage, group_id) in prows:
         imgs = _db().run(
             "SELECT image_s3_url, attributes, sort_order, embedding::text "
             "FROM product_images WHERE product_id = CAST(:id AS uuid) ORDER BY sort_order, created_at", id=str(pid),
@@ -403,7 +416,7 @@ def _catalog_export(cid):
         products.append({
             "optimaId": optima_id, "name": pname, "params": params, "category": category,
             "subtype": subtype, "manufacturer": mfr, "manufacturerCode": mfr_code,
-            "catalogPage": cpage, "images": images,
+            "catalogPage": cpage, "groupId": group_id, "images": images,
         })
     pkg = {
         "catalog": {"name": name, "manufacturer": manufacturer, "domainCategory": domain,

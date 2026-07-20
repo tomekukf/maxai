@@ -65,6 +65,14 @@ def _presign_get(s3_url: str) -> str:
     return s3.generate_presigned_url("get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600)
 
 
+def _page_image_url(pdf_s3_url, catalog_page):
+    """Lekki obraz strony katalogu (JPEG) zamiast całego PDF: <prefix>/pages/p{idx}.jpg (idx = strona-1)."""
+    if not pdf_s3_url or not catalog_page:
+        return None
+    prefix = pdf_s3_url.rsplit("/", 1)[0]  # s3://.../catalogs/<folder>
+    return _presign_get(f"{prefix}/pages/p{int(catalog_page) - 1}.jpg")
+
+
 def _get_s3_bytes(s3_url: str):
     try:
         without = s3_url.replace("s3://", "", 1)
@@ -299,10 +307,10 @@ def lambda_handler(event, _ctx):
         where = "WHERE p.category = :cat " if cat else ""
         sql = (
             "SELECT * FROM ("
-            "  SELECT DISTINCT ON (product_id) product_id, optima_id, name, params, subtype, image_s3_url,"
+            "  SELECT DISTINCT ON (product_id) product_id, optima_id, name, params, subtype, group_id, image_s3_url,"
             "         attributes, source, category, manufacturer, catalog_page, catalog_name, catalog_pdf, sim"
             "  FROM ("
-            "    SELECT p.id AS product_id, p.optima_id, p.name, p.params, p.subtype, pi.image_s3_url,"
+            "    SELECT p.id AS product_id, p.optima_id, p.name, p.params, p.subtype, p.group_id, pi.image_s3_url,"
             "           pi.attributes, p.source, p.category, p.manufacturer, p.catalog_page,"
             "           c.name AS catalog_name, c.pdf_s3_url AS catalog_pdf,"
             "           1 - (pi.embedding <=> CAST(:q AS vector)) AS sim"
@@ -326,12 +334,12 @@ def lambda_handler(event, _ctx):
     cands = [
         {
             "product_id": str(product_id), "optimaId": optima_id, "name": name, "params": params,
-            "subtype": subtype, "image_s3_url": image_s3_url, "attributes": attributes,
+            "subtype": subtype, "group_id": group_id, "image_s3_url": image_s3_url, "attributes": attributes,
             "source": source, "category": category, "manufacturer": manufacturer,
             "catalog_page": catalog_page, "catalog_name": catalog_name, "catalog_pdf": catalog_pdf,
             "sim": round(float(sim), 4),
         }
-        for (product_id, optima_id, name, params, subtype, image_s3_url, attributes, source, category,
+        for (product_id, optima_id, name, params, subtype, group_id, image_s3_url, attributes, source, category,
              manufacturer, catalog_page, catalog_name, catalog_pdf, sim) in rows
     ]
 
@@ -361,6 +369,7 @@ def lambda_handler(event, _ctx):
             "optimaId": c["optimaId"],
             "name": c["name"],
             "subtype": c["subtype"],
+            "groupId": c["group_id"],
             "params": c["params"],
             "imageUrl": _presign_get(c["image_s3_url"]),
             "similarity": match,
@@ -378,7 +387,8 @@ def lambda_handler(event, _ctx):
             item["manufacturer"] = c["manufacturer"]
             item["catalogName"] = c["catalog_name"]
             item["catalogPage"] = c["catalog_page"]
-            item["catalogUrl"] = _presign_get(c["catalog_pdf"])
+            item["catalogUrl"] = _presign_get(c["catalog_pdf"])  # cały PDF (do pobrania)
+            item["catalogPageImageUrl"] = _page_image_url(c["catalog_pdf"], c["catalog_page"])  # lekki obraz strony
         results.append(item)
     # queryAttributes: co system „zrozumiał" z wycinka (do panelu „dlaczego podobne").
     return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs})

@@ -56,6 +56,22 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
     });
   }, [items, q, cat, sub]);
 
+  // Zwijanie wariantów tego samego produktu (group_id) w jedną kafelkę.
+  const grouped = useMemo(() => {
+    const m = new Map<string, Product[]>();
+    const order: string[] = [];
+    for (const p of filtered) {
+      const key = p.groupId || p.id;
+      const g = m.get(key);
+      if (g) g.push(p);
+      else {
+        m.set(key, [p]);
+        order.push(key);
+      }
+    }
+    return order.map((k) => m.get(k) as Product[]);
+  }, [filtered]);
+
   async function onDeleteOne(id: string, label: string) {
     if (!confirm(`Usunąć produkt ${label} (wraz ze zdjęciami)?`)) return;
     setBusy(true);
@@ -129,30 +145,43 @@ export default function CatalogPage({ admin = false }: { admin?: boolean }) {
 
         {items && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {filtered.map((p) => (
-              <div key={p.id} className="relative rounded-lg border bg-white p-2">
-                {admin && (
-                  <button
-                    onClick={() => onDeleteOne(p.id, p.optimaId ?? p.manufacturerCode ?? p.name ?? p.id)}
-                    disabled={busy}
-                    title="Usuń"
-                    className="absolute right-1 top-1 z-10 rounded bg-white/90 px-1.5 py-0.5 text-xs text-red-600 shadow hover:bg-red-50 disabled:opacity-50"
-                  >
-                    Usuń
+            {grouped.map((grp) => {
+              const p = grp[0];
+              return (
+                <div key={p.groupId || p.id} className="relative rounded-lg border bg-white p-2">
+                  {admin && (
+                    <button
+                      onClick={() => onDeleteOne(p.id, p.optimaId ?? p.manufacturerCode ?? p.name ?? p.id)}
+                      disabled={busy}
+                      title="Usuń"
+                      className="absolute right-1 top-1 z-10 rounded bg-white/90 px-1.5 py-0.5 text-xs text-red-600 shadow hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Usuń
+                    </button>
+                  )}
+                  {grp.length > 1 && (
+                    <span className="absolute left-1 top-1 z-10 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-white">
+                      {grp.length} wariantów
+                    </span>
+                  )}
+                  <button onClick={() => setOpenId(p.id)} className="block w-full text-left">
+                    <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
+                      <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" loading="lazy" />
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      <code>{p.optimaId ?? p.manufacturerCode ?? '—'}</code>
+                      {p.subtype && <span className="ml-1 rounded bg-slate-100 px-1">{p.subtype}</span>}
+                    </div>
+                    <div className="line-clamp-2 text-xs font-medium">{p.name}</div>
+                    {grp.length > 1 && (
+                      <div className="mt-0.5 truncate text-[10px] text-slate-400">
+                        {grp.map((v) => v.manufacturerCode).filter(Boolean).join(', ')}
+                      </div>
+                    )}
                   </button>
-                )}
-                <button onClick={() => setOpenId(p.id)} className="block w-full text-left">
-                  <div className="mb-2 aspect-square overflow-hidden rounded bg-slate-100">
-                    <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" loading="lazy" />
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    <code>{p.optimaId ?? p.manufacturerCode ?? '—'}</code>
-                    {p.subtype && <span className="ml-1 rounded bg-slate-100 px-1">{p.subtype}</span>}
-                  </div>
-                  <div className="line-clamp-2 text-xs font-medium">{p.name}</div>
-                </button>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </main>
@@ -182,7 +211,7 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
     getProduct(id)
       .then((pd) => {
         setD(pd);
-        setForm({ name: pd.name, optimaId: pd.optimaId ?? '', category: pd.category, subtype: pd.subtype });
+        setForm({ name: pd.name, optimaId: pd.optimaId ?? '', category: pd.category, subtype: pd.subtype, groupId: pd.groupId ?? '' });
         setParamsText(JSON.stringify(pd.params ?? {}, null, 2));
       })
       .catch((e) => setErr((e as Error).message));
@@ -235,9 +264,18 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
             </div>
 
             {d.catalog && (
-              <div className="text-sm">
-                <a href={`${d.catalog.pdfUrl}#page=${d.catalog.page}`} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">
+              <div className="flex flex-wrap gap-3 text-sm">
+                {/* Lekki obraz strony (~200 KB) zamiast całego PDF; ta sama karta. */}
+                <a
+                  href={d.catalog.pageImageUrl ?? d.catalog.pdfUrl}
+                  target="maxai-katalog"
+                  rel="noreferrer"
+                  className="text-blue-700 hover:underline"
+                >
                   📄 {d.catalog.name}, str. {(d.params?.printed_page as number) ?? d.catalog.page} ↗
+                </a>
+                <a href={`${d.catalog.pdfUrl}#page=${d.catalog.page}`} target="_blank" rel="noreferrer" className="text-slate-400 hover:underline">
+                  (cały PDF)
                 </a>
               </div>
             )}
@@ -271,6 +309,8 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
                   <Field label="Kategoria" value={form.category ?? ''} onChange={(v) => setForm((f) => ({ ...f, category: v }))} />
                   <Field label="Podtyp" value={form.subtype ?? ''} onChange={(v) => setForm((f) => ({ ...f, subtype: v }))} />
                 </div>
+                <Field label="Grupa wariantów (group_id)" value={form.groupId ?? ''} onChange={(v) => setForm((f) => ({ ...f, groupId: v }))} />
+                {d.groupId && <div className="text-xs text-slate-400">Warianty łączy wspólny group_id.</div>}
                 <div>
                   <div className="mb-1 text-xs font-medium text-slate-500">Parametry (JSON)</div>
                   <textarea value={paramsText} onChange={(e) => setParamsText(e.target.value)} rows={8} className="w-full rounded border border-slate-300 p-2 font-mono text-xs" />

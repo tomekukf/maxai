@@ -150,8 +150,11 @@ export async function saveProduct(input: {
 }
 
 export type SearchResult = {
+  id?: string;
   optimaId: string | null;
   name: string;
+  subtype?: string | null;
+  groupId?: string | null;
   params: Record<string, unknown>;
   imageUrl: string;
   similarity: number; // ocena dopasowania (rerank 0-1) lub cosinus Titana (fallback)
@@ -167,7 +170,8 @@ export type SearchResult = {
   manufacturer?: string;
   catalogName?: string;
   catalogPage?: number; // strona PDF (1-based) do #page=N
-  catalogUrl?: string; // presigned link do PDF w S3
+  catalogUrl?: string; // presigned link do PDF w S3 (cały katalog)
+  catalogPageImageUrl?: string; // lekki obraz pojedynczej strony katalogu
 };
 
 export type SearchResponse = {
@@ -199,6 +203,7 @@ export type Product = {
   source?: string;
   category?: string;
   subtype?: string;
+  groupId?: string | null;
   manufacturerCode?: string;
   imageUrl: string;
   imageCount?: number;
@@ -220,8 +225,9 @@ export type ProductDetail = {
   subtype?: string;
   manufacturer?: string;
   manufacturerCode?: string;
+  groupId?: string | null;
   images: ProductImage[];
-  catalog?: { name: string; page: number; pdfUrl: string };
+  catalog?: { name: string; page: number; pdfUrl: string; pageImageUrl?: string };
 };
 
 // Pola edytowalne w panelu (PUT /products/{id}).
@@ -232,6 +238,7 @@ export type ProductPatch = Partial<{
   subtype: string;
   manufacturer: string;
   manufacturerCode: string;
+  groupId: string;
   sourceUrl: string;
   params: Record<string, unknown>;
 }>;

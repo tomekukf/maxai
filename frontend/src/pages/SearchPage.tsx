@@ -300,7 +300,7 @@ export default function SearchPage() {
         {results && results.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <h3 className="font-medium">Propozycje ({results.length})</h3>
+              <h3 className="font-medium">Propozycje ({groupResults(results).length})</h3>
               {admin && (
                 <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
                   {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
@@ -311,8 +311,8 @@ export default function SearchPage() {
               <DiagPanel queryImg={queryImg} category={queryCategory} attrs={queryAttrs} results={results} />
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {results.map((r, i) => (
-                <ResultCard key={i} r={r} rank={i + 1} queryAttrs={queryAttrs} />
+              {groupResults(results).map((g, i) => (
+                <ResultCard key={i} r={g.rep} rank={i + 1} queryAttrs={queryAttrs} variants={g.variants} />
               ))}
             </div>
             <div className="pt-1">
@@ -325,6 +325,24 @@ export default function SearchPage() {
       </main>
     </div>
   );
+}
+
+type Grouped = { rep: SearchResult; variants: SearchResult[] };
+
+// Zwijanie wariantów tego samego produktu (group_id) w jedną kartę; reprezentant = najlepszy wynik.
+function groupResults(results: SearchResult[]): Grouped[] {
+  const map = new Map<string, Grouped>();
+  const order: string[] = [];
+  for (const r of results) {
+    const key = r.groupId || r.id || r.optimaId || r.name;
+    const g = map.get(key);
+    if (g) g.variants.push(r);
+    else {
+      map.set(key, { rep: r, variants: [r] });
+      order.push(key);
+    }
+  }
+  return order.map((k) => map.get(k) as Grouped);
 }
 
 function DiagPanel({
@@ -405,14 +423,20 @@ function DiagPanel({
   );
 }
 
+function variantCode(x: SearchResult): string {
+  return (x.params?.codes as string[] | undefined)?.[0] ?? x.optimaId ?? '';
+}
+
 function ResultCard({
   r,
   rank,
   queryAttrs,
+  variants = [],
 }: {
   r: SearchResult;
   rank: number;
   queryAttrs: Record<string, unknown> | null;
+  variants?: SearchResult[];
 }) {
   const [copied, setCopied] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
@@ -442,32 +466,41 @@ function ResultCard({
         </div>
       )}
 
+      {variants.length > 1 && (
+        <div className="mt-1 text-xs text-slate-600">
+          Warianty ({variants.length}):{' '}
+          {variants.map((v) => (
+            <code key={v.id ?? variantCode(v)} className="mr-1 rounded bg-slate-100 px-1">{variantCode(v)}</code>
+          ))}
+        </div>
+      )}
+
       {r.source === 'catalog' && (
         <div className="mt-2 space-y-0.5 text-xs text-slate-600">
-          <div>
-            {r.manufacturer && <span className="font-medium">{r.manufacturer}</span>}
-            {r.params?.codes != null && (
-              <code className="ml-1 rounded bg-slate-100 px-1.5 py-0.5">
-                {Array.isArray(r.params.codes) ? (r.params.codes as string[]).join(', ') : String(r.params.codes)}
-              </code>
-            )}
-          </div>
-          {r.catalogUrl && (
-            <a
-              href={r.catalogPage ? `${r.catalogUrl}#page=${r.catalogPage}` : r.catalogUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-700 hover:underline"
-            >
-              📄 {r.catalogName ?? 'Katalog'}
-              {/* Wyświetlamy numer DRUKARSKI (params.printed_page), a #page= kotwiczy stronę PDF */}
-              {r.params?.printed_page != null
-                ? `, str. ${r.params.printed_page}`
-                : r.catalogPage
-                  ? `, str. ${r.catalogPage}`
-                  : ''}{' '}
-              ↗
-            </a>
+          {r.manufacturer && <div className="font-medium">{r.manufacturer}</div>}
+          {(r.catalogPageImageUrl || r.catalogUrl) && (
+            <div className="flex flex-wrap gap-2">
+              {/* Otwiera LEKKI obraz strony (~200 KB) w tej samej karcie; numer DRUKARSKI do wyświetlenia. */}
+              <a
+                href={r.catalogPageImageUrl ?? r.catalogUrl}
+                target="maxai-katalog"
+                rel="noreferrer"
+                className="text-blue-700 hover:underline"
+              >
+                📄 {r.catalogName ?? 'Katalog'}
+                {r.params?.printed_page != null ? `, str. ${r.params.printed_page}` : r.catalogPage ? `, str. ${r.catalogPage}` : ''} ↗
+              </a>
+              {r.catalogUrl && (
+                <a
+                  href={r.catalogPage ? `${r.catalogUrl}#page=${r.catalogPage}` : r.catalogUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-slate-400 hover:underline"
+                >
+                  (cały PDF)
+                </a>
+              )}
+            </div>
           )}
         </div>
       )}

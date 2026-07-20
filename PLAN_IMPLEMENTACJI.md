@@ -615,6 +615,28 @@ Formaty specyfikacji spójne w katalogu: `W` (moc), `lm`, `K` (barwa), `IP`, `°
   (rerank %, kosinus Titana, powód sędziego). Dane już zwracane przez `/search` — zmiana tylko we froncie.
 - ✅ Weryfikacja: admin widzi flow zapytania (opis LLM + wpływ na ranking); niewidoczne dla handlowca.
 
+### Faza 9 — UX katalogu (podgląd, szybkie otwieranie) + grupowanie wariantów
+
+**Krok 9.0 — Powiększanie zdjęć (lightbox) w podglądzie produktu** — ✅ ZROBIONE
+- `CatalogPage`: klik w miniaturę → overlay z powiększeniem (klik zamyka). Bez backendu.
+
+**Krok 9.1 — Szybkie otwieranie strony katalogu (bez pobierania 200 MB)** — ✅ ZROBIONE
+- Problem: presigned URL do całego PDF zmienia się co klik → brak cache → 200 MB za każdym razem.
+- Rozwiązanie (darmowe): `scripts/render-catalog-pages.py` renderuje strony do JPEG (~200–500 KB), wgrywane do
+  `s3://…/catalogs/<folder>/pages/pN.jpg`. `/search` i `GET /products/{id}` zwracają `catalogPageImageUrl`
+  (presigned obraz strony). Front otwiera **obraz strony** (ta sama nazwana karta), a „(cały PDF)" jako drugorzędny.
+- Koszt: render lokalny 0 zł; S3 ~100 MB → grosze. ✅ Weryfikacja: 343 strony w S3; wynik otwiera lekki obraz.
+
+**Krok 9.2 — Grupowanie wariantów produktu (group_id)** — ✅ ZROBIONE
+- Migracja `005_group_id.sql` (`products.group_id` + indeks). Klucz grupy (heurystyka, edytowalna):
+  `slug(name)-subtype-{moc}w-{lm}lm` → warianty tego samego modelu w różnych wykończeniach/kolorach.
+  Ekstraktor (`extract-maxlight.py`) + aktualizacja istniejących (SQL). `/products`, `/search` zwracają `groupId`;
+  `group_id` w polach edytowalnych (`PUT`) + eksporcie.
+- Front: `SearchPage` i `CatalogPage` **zwijają warianty w jedną kartę** (badge „N wariantów" + kody);
+  admin może poprawić `group_id` w edycji produktu.
+- Koszt: 0 zł Bedrock (logika lokalna/DB). ✅ Weryfikacja: EMPIRE P0634D+P0635D (chrom+złoto, 121 W) →
+  jedna grupa; P0636D (17 W) osobno; TRIAC nieprzemerdżony.
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)

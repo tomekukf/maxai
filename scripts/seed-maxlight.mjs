@@ -84,6 +84,7 @@ for (const [i, p] of products.entries()) {
     source: 'catalog',
     category: p.category,
     subtype: p.subtype,
+    groupId: p.group_id,
     catalogId,
     catalogPage: p.viewer_page,
     describe: false,

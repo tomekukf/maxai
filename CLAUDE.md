@@ -83,6 +83,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   uwzględniają specyfikacje. ✅ 8.4 rerank ocenia na **wszystkich** zdjęciach kandydata (w wyniku 1). ✅ 8.6
   `CatalogPage` — czytelna „Specyfikacja" + „Opis wizualny" w podglądzie (edycja przez params JSON w adminie).
   📐 8.5 opisy wizualne (`attributes`) — 0/891, do wygenerowania LOKALNIE (konsumpcja gotowa). Szczegóły: Faza 8.
+- 🎉 **Faza 9 — UX katalogu + grupowanie wariantów (zrobione).** 9.0 lightbox miniatur w podglądzie. 9.1 szybkie
+  otwieranie strony katalogu: `render-catalog-pages.py` → JPEG stron w S3 (`catalogs/<folder>/pages/pN.jpg`);
+  `/search` i `/products/{id}` zwracają `catalogPageImageUrl`; front otwiera lekki obraz (nie 200 MB PDF), „(cały PDF)"
+  drugorzędnie. 9.2 grupowanie wariantów: migracja `005` (`group_id`), heurystyka `slug(name)-subtype-{moc}w-{lm}lm`,
+  zwijanie w jedną kartę (search+katalog), edytowalne w adminie. Koszt: darmowe/grosze. Szczegóły: Faza 9.
 - ▶️ Następne: pozyskanie realnych danych klienta (scraping strony klienta — czekam na URL) + dopasowanie GUI pod jego asortyment.
 
 ## Gotchas (git bash / AWS)

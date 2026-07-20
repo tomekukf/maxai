@@ -144,6 +144,18 @@ def slug(s):
     return re.sub(r"[^a-z0-9]+", "-", (s or "prod").lower()).strip("-")
 
 
+def group_key(name, subtype, sp):
+    """Klucz grupy wariantów: ta sama nazwa+subtype+kluczowe specs (moc/lm) = warianty (różne wykończenie)."""
+    parts = [slug(name)]
+    if subtype:
+        parts.append(subtype)
+    if sp and sp.get("power_w"):
+        parts.append(sp["power_w"] + "w")
+    if sp and sp.get("lumens"):
+        parts.append(sp["lumens"] + "lm")
+    return "-".join(parts)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
@@ -186,6 +198,7 @@ def main():
             "images": saved,
             "category": "oswietlenie",
             "subtype": subtype_of(codes),   # deterministycznie z prefiksu kodu
+            "group_id": group_key(name, subtype_of(codes), specs(text)),  # grupowanie wariantow
             "attributes": None,             # uzupelniane w kroku analizy wizualnej (opc.)
         })
         if args.limit and len(products) >= args.limit:
