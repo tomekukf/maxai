@@ -68,6 +68,7 @@ function cropToBase64(
 type SearchGroup = {
   key: string;
   label: string;
+  hint?: string; // etykieta detekcji przekazana do /search (naprowadza opis na właściwy obiekt)
   b64: string;
   queryImg: string;
   queryCategory: string | null;
@@ -97,6 +98,7 @@ export default function SearchPage() {
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set()); // wykryte produkty zaznaczone do batcha
   const [groups, setGroups] = useState<SearchGroup[]>([]); // wyniki: 1 grupa = 1 produkt
+  const [manualHint, setManualHint] = useState(''); // „czego szukasz?" dla ręcznego kadru
   // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
   const [admin] = useState(() => isAdmin(loadSession()));
   const [diag, setDiag] = useState(false);
@@ -119,6 +121,7 @@ export default function SearchPage() {
     setCompletedCrop(null);
     setSelected(new Set());
     setGroups([]);
+    setManualHint('');
     setMsg(null);
   }
 
@@ -193,6 +196,7 @@ export default function SearchPage() {
     const b = items[i].box;
     const c: PixelCrop = { unit: 'px', x: b.x * image.width, y: b.y * image.height, width: b.w * image.width, height: b.h * image.height };
     setActiveItem(i);
+    setManualHint(items[i].label); // podpowiedź prefill z etykiety detekcji
     setCrop(c);
     setCompletedCrop(c);
   }
@@ -216,6 +220,7 @@ export default function SearchPage() {
       return {
         key: `d${i}`,
         label: `${numBadge(n + 1)} ${items[i].label}`,
+        hint: items[i].label,
         b64: b64 ?? '',
         queryImg: b64 ? 'data:image/jpeg;base64,' + b64 : '',
         queryCategory: null, queryAttrs: null, results: [],
@@ -223,7 +228,7 @@ export default function SearchPage() {
       };
     });
     setGroups(newGroups);
-    await Promise.all(newGroups.map((g, gi) => (g.b64 ? runGroupSearch(gi, g.b64, 3) : Promise.resolve())));
+    await Promise.all(newGroups.map((g, gi) => (g.b64 ? runGroupSearch(gi, g.b64, 3, g.hint) : Promise.resolve())));
   }
 
   // Ręczny kadr → pojedyncza grupa wyników.
@@ -241,18 +246,19 @@ export default function SearchPage() {
       return;
     }
     setMsg(null);
+    const hint = manualHint.trim() || undefined;
     setGroups([{
-      key: 'manual', label: 'Ręczny wybór', b64,
+      key: 'manual', label: hint ? `Ręczny wybór — ${hint}` : 'Ręczny wybór', hint, b64,
       queryImg: 'data:image/jpeg;base64,' + b64,
       queryCategory: null, queryAttrs: null, results: [], busy: true, loadingMore: false, error: null,
     }]);
-    await runGroupSearch(0, b64, 3);
+    await runGroupSearch(0, b64, 3, hint);
   }
 
-  async function runGroupSearch(gi: number, b64: string, k: number) {
+  async function runGroupSearch(gi: number, b64: string, k: number, hint?: string) {
     setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: true, error: null } : g)));
     try {
-      const res = await searchByImage(b64, k);
+      const res = await searchByImage(b64, k, hint);
       setGroups((gs) => gs.map((g, i) => (i === gi
         ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
@@ -266,7 +272,7 @@ export default function SearchPage() {
     if (!g || !g.b64) return;
     setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: true } : x)));
     try {
-      const res = await searchByImage(g.b64, g.results.length + 3);
+      const res = await searchByImage(g.b64, g.results.length + 3, g.hint);
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, results: res.results, loadingMore: false } : x)));
     } catch (e) {
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: false, error: (e as Error).message } : x)));
@@ -427,9 +433,18 @@ export default function SearchPage() {
               <button onClick={searchSelected} disabled={anyBusy || selected.size === 0} className={btnPrimary}>
                 {anyBusy ? 'Szukam…' : `Szukaj zaznaczonych${selected.size ? ` (${selected.size})` : ''}`}
               </button>
-              <button onClick={searchManualCrop} disabled={anyBusy || !completedCrop} className={navBtn}>
-                Szukaj ręcznego kadru
-              </button>
+              <span className="flex items-center gap-2">
+                <button onClick={searchManualCrop} disabled={anyBusy || !completedCrop} className={navBtn}>
+                  Szukaj ręcznego kadru
+                </button>
+                <input
+                  value={manualHint}
+                  onChange={(e) => setManualHint(e.target.value)}
+                  placeholder="czego szukasz? (np. stolik kawowy)"
+                  title="Podpowiedź: który obiekt w kadrze jest głównym — pomaga, gdy w tle są inne meble"
+                  className="w-52 rounded border border-slate-300 px-2 py-1 text-xs"
+                />
+              </span>
               {msg && <span className="text-sm text-red-700">{msg}</span>}
             </div>
           </>
@@ -438,16 +453,21 @@ export default function SearchPage() {
         {/* Wyniki — osobna sekcja na każdy produkt */}
         {groups.length > 0 && (
           <div className="space-y-6">
-            {groups.length > 1 || admin ? (
-              <div className="flex items-center gap-3">
-                <h3 className="font-medium">Wyniki dla {groups.length} {groups.length === 1 ? 'produktu' : 'produktów'}</h3>
-                {admin && (
-                  <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
-                    {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
-                  </button>
-                )}
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="font-medium">Wyniki dla {groups.length} {groups.length === 1 ? 'produktu' : 'produktów'}</h3>
+              <button
+                onClick={() => printSummary(groups)}
+                disabled={anyBusy || !groups.some((g) => g.results.length)}
+                className="text-xs text-blue-700 hover:underline disabled:opacity-40"
+              >
+                🖨️ Drukuj / zapisz PDF
+              </button>
+              {admin && (
+                <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
+                  {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
+                </button>
+              )}
+            </div>
             {groups.map((g, gi) => (
               <GroupSection
                 key={g.key}
@@ -522,6 +542,77 @@ function groupResults(results: SearchResult[]): Grouped[] {
     }
   }
   return order.map((k) => map.get(k) as Grouped);
+}
+
+// Podsumowanie wyszukiwania do druku/PDF — nowe okno z samodzielnym HTML (zdjęcia jako <img>,
+// bez CORS/canvas), auto-print po załadowaniu obrazów. „Zapisz jako PDF" w oknie druku przeglądarki.
+function printSummary(groups: SearchGroup[]) {
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert('Przeglądarka zablokowała okno druku — zezwól na wyskakujące okna dla tej strony.');
+    return;
+  }
+  const esc = (s: unknown) =>
+    String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+  const sections = groups
+    .filter((g) => g.results.length)
+    .map((g) => {
+      const cards = groupResults(g.results)
+        .map((gr, i) => {
+          const r = gr.rep;
+          const code = r.optimaId ?? (r.params?.sku as string | undefined) ?? (r.params?.codes as string[] | undefined)?.[0] ?? '';
+          const page = (r.params?.printed_page as number | undefined) ?? r.catalogPage;
+          const katalog = r.catalogName ? `${r.catalogName}${page != null ? `, str. ${page}` : ''}` : '';
+          return `<div class="card">
+            <img src="${esc(r.imageUrl)}" />
+            <div class="pct">${(r.similarity * 100).toFixed(0)}%</div>
+            <div class="name">#${i + 1} ${esc(r.name)}</div>
+            ${code ? `<div class="code">${esc(code)}</div>` : ''}
+            ${r.manufacturer ? `<div class="mfr">${esc(r.manufacturer)}</div>` : ''}
+            ${katalog ? `<div class="cat">${esc(katalog)}</div>` : ''}
+          </div>`;
+        })
+        .join('');
+      return `<section>
+        <h2>${g.queryImg ? `<img class="q" src="${esc(g.queryImg)}" />` : ''}<span>${esc(g.label)}${g.queryCategory ? ` · ${esc(g.queryCategory)}` : ''}</span></h2>
+        <div class="grid">${cards}</div>
+      </section>`;
+    })
+    .join('');
+  const html = `<!doctype html><html lang="pl"><head><meta charset="utf-8" />
+<title>maxai — propozycje produktów</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Jost, system-ui, sans-serif; color: #1e293b; margin: 24px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid #760039; padding-bottom: 8px; margin-bottom: 16px; }
+  h1 { color: #760039; font-size: 20px; margin: 0; }
+  .date { color: #64748b; font-size: 12px; }
+  section { margin-bottom: 20px; page-break-inside: avoid; }
+  h2 { font-size: 14px; display: flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 6px 8px; border-radius: 6px; }
+  h2 .q { height: 32px; width: 32px; object-fit: contain; background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
+  .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; position: relative; page-break-inside: avoid; }
+  .card img { width: 100%; height: 130px; object-fit: contain; background: #f8fafc; border-radius: 4px; }
+  .pct { position: absolute; top: 12px; left: 12px; background: #108474; color: #fff; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+  .name { font-size: 12px; font-weight: 600; margin-top: 6px; }
+  .code { font-family: monospace; font-size: 11px; background: #f1f5f9; display: inline-block; padding: 1px 4px; border-radius: 3px; margin-top: 2px; }
+  .mfr, .cat { font-size: 11px; color: #475569; margin-top: 2px; }
+  @media print { body { margin: 12mm; } a { text-decoration: none; } }
+</style></head>
+<body>
+  <header><h1>maxai — propozycje produktów</h1><div class="date">${esc(new Date().toLocaleString('pl-PL'))}</div></header>
+  ${sections || '<p>Brak wyników do podsumowania.</p>'}
+  <script>
+    window.addEventListener('load', function () {
+      var imgs = Array.prototype.slice.call(document.images);
+      Promise.all(imgs.map(function (im) { return im.complete ? 1 : new Promise(function (r) { im.onload = im.onerror = r; }); }))
+        .then(function () { setTimeout(function () { window.print(); }, 150); });
+    });
+  <\/script>
+</body></html>`;
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 function DiagPanel({

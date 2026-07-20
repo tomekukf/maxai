@@ -158,10 +158,24 @@ def _norm_category(cat):
     return None
 
 
-def _describe_query(image_bytes: bytes):
-    """Opisz wycinek zapytania tym samym schematem (drugi sygnał dopasowania)."""
+def _describe_query(image_bytes: bytes, hint: str = None):
+    """Opisz wycinek zapytania tym samym schematem (drugi sygnał dopasowania).
+
+    hint (opcjonalny) = etykieta z auto-detekcji, np. 'stolik kawowy'. Naprowadza opis na WŁAŚCIWY
+    obiekt, gdy w kadrze jest tło (np. stolik na pierwszym planie + pół kanapy w tle). Sygnał MIĘKKI:
+    finalną kategorię i tak ustala model (odporność na błędną detekcję)."""
     if not RERANK_MODEL_ID:
         return None
+    hint = (hint or "").strip()
+    if hint:
+        prompt = (
+            f"To wycinek z wizualizacji wnętrza. GŁÓWNYM obiektem zapytania jest: «{hint}» — "
+            "opisz WŁAŚNIE ten obiekt (pierwszy plan / centrum kadru), a inne meble/produkty w tle "
+            "ZIGNORUJ. Jeśli wskazanego obiektu naprawdę nie ma w kadrze, opisz obiekt dominujący. "
+            "Zwróć JSON wg schematu."
+        )
+    else:
+        prompt = "Opisz ten mebel wg schematu (JSON). To wycinek z wizualizacji wnętrza."
     try:
         out = bedrock.converse(
             modelId=RERANK_MODEL_ID,
@@ -171,7 +185,7 @@ def _describe_query(image_bytes: bytes):
                     "role": "user",
                     "content": [
                         {"image": {"format": _img_format(image_bytes), "source": {"bytes": image_bytes}}},
-                        {"text": "Opisz ten mebel wg schematu (JSON). To wycinek z wizualizacji wnętrza."},
+                        {"text": prompt},
                     ],
                 }
             ],
@@ -300,7 +314,8 @@ def lambda_handler(event, _ctx):
     vec = "[" + ",".join(str(x) for x in emb) + "]"
 
     # Opis wycinka zapytania NAJPIERW — daje kategorię (twarda bramka) + drugi sygnał do rerankingu.
-    query_attrs = _describe_query(image_bytes)
+    # hint = etykieta z auto-detekcji (np. 'stolik kawowy') — naprowadza opis na właściwy obiekt (tło ignoruj).
+    query_attrs = _describe_query(image_bytes, body.get("hint"))
     cat = None
     if body.get("category"):
         cat = _norm_category(body.get("category"))  # jawne wymuszenie z UI (opcjonalne)

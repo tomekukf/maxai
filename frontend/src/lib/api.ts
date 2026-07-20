@@ -187,11 +187,12 @@ export type SearchResponse = {
   queryAttributes?: Record<string, unknown> | null; // co system „zrozumiał" z wycinka
 };
 
-export async function searchByImage(imageBase64: string, topK = 3): Promise<SearchResponse> {
+export async function searchByImage(imageBase64: string, topK = 3, hint?: string): Promise<SearchResponse> {
   const r = await fetch(`${API_URL}/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ imageBase64, topK }),
+    // hint = etykieta z detekcji (np. „stolik kawowy") — naprowadza opis zapytania na właściwy obiekt.
+    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}) }),
   });
   if (!r.ok) throw new Error(`search: ${r.status}`);
   const data = await r.json();
