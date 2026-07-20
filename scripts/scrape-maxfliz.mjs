@@ -112,12 +112,13 @@ async function main() {
       if (VENDOR && (p.vendor || '').toUpperCase() !== VENDOR) continue;
       const title = (p.title || '').trim();
       const cat = categoryOf(p.vendor, title);
-      const code = codeOf(title);
+      const code = codeOf(title);                         // kod producenta z tytułu (np. P0476D)
+      const sku = ((p.variants && p.variants[0] && p.variants[0].sku) || '').trim() || null; // SKU maxfliz (GUI)
       const imgs = (p.images || []).map((im, i) => ({ src: im.src, i }));
       products.push({
         name: title,
         manufacturer: p.vendor || null,
-        manufacturerCode: code,
+        manufacturerCode: sku || code || slug(p.handle), // SKU (widoczny w GUI) → potem kod z tytułu → handle
         category: cat,
         subtype: subtypeOf(cat, title, code),
         group_id: slug(`${p.vendor}-${title.replace(/\b[A-Z]\d{3,4}[A-Z]?\b/, '').trim()}`) || slug(p.handle),
@@ -125,7 +126,8 @@ async function main() {
         params: {
           handle: p.handle,
           product_url: `${BASE}/products/${p.handle}`,
-          codes: codeOf(title) ? [codeOf(title)] : [],
+          sku,
+          codes: code ? [code] : [],                      // kod producenta (do dopasowania z katalogami)
           body_html_len: (p.body_html || '').length,
         },
         _images: imgs, // do pobrania / referencji (bez cen)
