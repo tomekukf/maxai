@@ -83,12 +83,17 @@ def main():
         imgs = [im for im in page.get_images(full=True)
                 if (lambda d: d["width"] * d["height"] >= 200 * 200)(doc.extract_image(im[0]))]
         lines = [clean(l) for l in text.splitlines() if clean(l)]
-        # strona produktowa: ma zdjęcie, nazwę i słowo-specyfikację
-        has_spec = re.search(r"Rozmiar|Wymiary|Grupy materia|Wysoko|Wype|Stela|Szeroko", text, re.I)
-        if not imgs or not lines or not has_spec:
-            continue
-        name = lines[0]
+        name = lines[0] if lines else ""
         type_line = lines[1] if len(lines) > 1 else ""
+        # pomiń okładki/spisy/sekcje
+        if re.search(r"KATALOG|SPIS TRE|MAXLIVING|ARCHITEKT|CENNIK|WWW\.|OFERTA", name, re.I):
+            continue
+        # strona produktowa: zdjęcie + nazwa + (tabela specyfikacji LUB typ mebla w 2. linii)
+        has_spec = re.search(r"Rozmiar|Wymiary|Grupy materia|Wysoko|Wype|Stela|Szeroko", text, re.I)
+        type_kw = re.search(r"naro|sofa|kanap|fotel|krzes|stolik|st[o�][l�]|[l�][o�][z�]k|komod|"
+                            r"bibliotek|rega|kontener|szaf|materac|biurko|bufet|witryn|\brtv\b|\bława", type_line, re.I)
+        if not imgs or not name or not (has_spec or type_kw):
+            continue
         cat = category_of(args.category, type_line)
         saved = []
         big = max(imgs, key=lambda im: doc.extract_image(im[0])["width"] * doc.extract_image(im[0])["height"])
