@@ -142,6 +142,28 @@ def _delete_s3(s3_url: str):
         pass
 
 
+def _delete_prefix(prefix_url: str):
+    """Usuń wszystkie obiekty S3 pod prefiksem (np. .../pages/)."""
+    try:
+        without = prefix_url.replace("s3://", "", 1)
+        bucket, prefix = without.split("/", 1)
+        token = None
+        while True:
+            kw = {"Bucket": bucket, "Prefix": prefix}
+            if token:
+                kw["ContinuationToken"] = token
+            resp = s3.list_objects_v2(**kw)
+            objs = [{"Key": o["Key"]} for o in resp.get("Contents", [])]
+            if objs:
+                s3.delete_objects(Bucket=bucket, Delete={"Objects": objs})
+            if resp.get("IsTruncated"):
+                token = resp.get("NextContinuationToken")
+            else:
+                break
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ---------- operacje ----------
 
 def _is_dup(msg):
@@ -437,6 +459,30 @@ def _catalog_export(cid):
     })
 
 
+def _catalog_delete(cid):
+    """Usuń całe źródło: katalog + jego produkty (kaskada) + zdjęcia/pdf/strony z S3."""
+    if not cid:
+        return _resp(400, {"error": "Brak id"})
+    conn = _db()
+    crow = conn.run("SELECT pdf_s3_url FROM catalogs WHERE id = CAST(:id AS uuid)", id=cid)
+    if not crow:
+        return _resp(404, {"error": "Nie znaleziono źródła"})
+    imgs = conn.run(
+        "SELECT pi.image_s3_url FROM product_images pi JOIN products p ON p.id = pi.product_id "
+        "WHERE p.catalog_id = CAST(:id AS uuid)", id=cid,
+    )
+    n = int(conn.run("SELECT count(*) FROM products WHERE catalog_id = CAST(:id AS uuid)", id=cid)[0][0])
+    for (u,) in imgs:
+        _delete_s3(u)
+    pdf = crow[0][0]
+    if pdf:
+        _delete_s3(pdf)
+        _delete_prefix(pdf.rsplit("/", 1)[0] + "/pages/")  # lekkie strony katalogu
+    _delete_s3(f"s3://{FILES_BUCKET}/exports/{cid}.json")  # ewentualny eksport
+    conn.run("DELETE FROM catalogs WHERE id = CAST(:id AS uuid)", id=cid)  # cascade → products → product_images
+    return _resp(200, {"deleted": n})
+
+
 def _with_retry(fn):
     global _conn
     try:
@@ -475,6 +521,8 @@ def lambda_handler(event, _ctx):
             return _with_retry(lambda: _catalog_export(pp.get("id")))
         if method == "GET":
             return _with_retry(_catalog_list)
+        if method == "DELETE":
+            return _with_retry(lambda: _catalog_delete(pp.get("id")))
         if method == "POST":
             try:
                 body = json.loads(event.get("body") or "{}")

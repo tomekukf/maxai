@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { createCatalog, uploadRaw, importProduct } from '../lib/api';
+import { useEffect, useState } from 'react';
+import {
+  createCatalog,
+  uploadRaw,
+  importProduct,
+  listCatalogs,
+  deleteCatalog,
+  exportCatalog,
+  type CatalogListItem,
+} from '../lib/api';
 
 type PkgImage = { file: string; role?: string; attributes?: unknown; embedding?: unknown };
 type PkgProduct = {
@@ -27,6 +35,32 @@ export default function ImportPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; ok: number; dup: number; err: number } | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  const [sources, setSources] = useState<CatalogListItem[] | null>(null);
+
+  function loadSources() {
+    listCatalogs().then(setSources).catch(() => setSources([]));
+  }
+  useEffect(loadSources, []);
+
+  async function onDeleteSource(id: string, name: string) {
+    if (!confirm(`Usunąć źródło „${name}" wraz ze wszystkimi jego produktami i zdjęciami? Tej operacji nie da się cofnąć.`)) return;
+    try {
+      const { deleted } = await deleteCatalog(id);
+      alert(`Usunięto źródło (${deleted} produktów).`);
+      loadSources();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  async function onExportSource(id: string) {
+    try {
+      const { downloadUrl } = await exportCatalog(id);
+      window.open(downloadUrl, '_blank');
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
 
   function onPick(files: FileList | null) {
     setErr(null);
@@ -107,6 +141,7 @@ export default function ImportPage() {
         setProgress({ done: i + 1, total, ok, dup, err: e });
       }
       addLog(`Gotowe: ok=${ok}, duplikaty=${dup}, błędy=${e}`);
+      loadSources();
     } catch (ex) {
       setErr((ex as Error).message);
     } finally {
@@ -124,6 +159,43 @@ export default function ImportPage() {
             Import nie używa Bedrock vision; embedding liczony przez Titan (lub brany z paczki, jeśli jest).
           </p>
         </div>
+
+        {/* Źródła w bazie — każdy import to „źródło", które można usunąć w całości i dodać od nowa. */}
+        <div className="rounded-lg border bg-white p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Źródła w bazie</h3>
+            <button onClick={loadSources} className="text-xs text-blue-700 hover:underline">Odśwież</button>
+          </div>
+          {!sources && <div className="text-xs text-slate-500">Ładuję…</div>}
+          {sources && sources.length === 0 && <div className="text-xs text-slate-400">Brak źródeł.</div>}
+          {sources && sources.length > 0 && (
+            <table className="w-full text-sm">
+              <tbody>
+                {sources.map((s) => (
+                  <tr key={s.id} className="border-t first:border-0">
+                    <td className="py-1">
+                      <div className="font-medium">{s.name ?? '—'}</div>
+                      <div className="text-xs text-slate-500">{s.manufacturer ?? '—'} · {s.productCount} produktów</div>
+                    </td>
+                    <td className="py-1 text-right">
+                      <button onClick={() => onExportSource(s.id)} className="mr-3 text-xs text-blue-700 hover:underline">Eksport</button>
+                      <button onClick={() => onDeleteSource(s.id, s.name ?? s.id)} className="text-xs text-red-600 hover:underline">Usuń źródło</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <details className="rounded-lg border bg-white p-3 text-xs text-slate-600">
+          <summary className="cursor-pointer font-medium text-slate-700">Jak przygotować dane do importu?</summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-5">
+            <li>Katalog PDF: <code>python scripts/prepare-catalog.py &lt;pdf&gt; &lt;nazwa&gt;</code> → poproś Claude „przygotuj katalog &lt;nazwa&gt;" → powstaje <code>rawdata/&lt;nazwa&gt;/collection.json</code> + zdjęcia.</li>
+            <li>Oferta maxfliz: <code>node scripts/scrape-maxfliz.mjs</code> → <code>rawdata/maxfliz/</code>.</li>
+            <li>Tu: wybierz folder z <code>collection.json</code> i kliknij „Importuj do bazy". Pełny opis: zakładka Dokumentacja.</li>
+          </ol>
+        </details>
 
         <input
           type="file"

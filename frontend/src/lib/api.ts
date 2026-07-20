@@ -108,6 +108,13 @@ export async function exportCatalog(id: string): Promise<{ downloadUrl: string; 
   return r.json();
 }
 
+// Usuń całe źródło (katalog) + jego produkty/zdjęcia (kaskada + S3). Tylko admin.
+export async function deleteCatalog(id: string): Promise<{ deleted: number }> {
+  const r = await fetch(`${API_URL}/catalogs/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+  if (!r.ok) throw new Error(`delete catalog: ${r.status}`);
+  return r.json();
+}
+
 // Zapis produktu z importu (surowe body — pola katalogowe, images z embeddingiem/attributes).
 export async function importProduct(body: Record<string, unknown>): Promise<{ id?: string; duplicate?: boolean }> {
   const r = await fetch(`${API_URL}/products`, {

@@ -217,6 +217,7 @@ export class MaxaiStack extends Stack {
     httpApi.addRoutes({ path: '/products', methods: [HttpMethod.POST, HttpMethod.DELETE], integration: productsInteg, authorizer: jwtAuth });
     httpApi.addRoutes({ path: '/products/{optimaId}', methods: [HttpMethod.PUT, HttpMethod.DELETE], integration: productsInteg, authorizer: jwtAuth });
     httpApi.addRoutes({ path: '/catalogs', methods: [HttpMethod.POST], integration: productsInteg, authorizer: jwtAuth });
+    httpApi.addRoutes({ path: '/catalogs/{id}', methods: [HttpMethod.DELETE], integration: productsInteg, authorizer: jwtAuth });
 
     // --- Lambda: wyszukiwanie substytutów (embedding wycinka → pgvector) ---
     const searchFn = new lambda.Function(this, 'SearchFn', {

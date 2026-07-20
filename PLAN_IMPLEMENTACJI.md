@@ -653,7 +653,10 @@ pozwala, `Crawl-delay: 1`). Oferta publiczna = to, co na stronie; oferta niepubl
 MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per produkt: tytuł (często z kodem),
 `vendor`, wszystkie zdjęcia (CDN), opis (`body_html`), warianty. **Cen nie używamy.**
 
-**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)**
+**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)** — 🟡 NARZĘDZIE GOTOWE (masowy import za zgodą)
+- Stan: `scrape-maxfliz.mjs` gotowy i przetestowany; pełny zaciąg metadanych = **3749 produktów** (płytki 1310,
+  oświetlenie 872, dywany 180, meble ~218, **inne 1169** — do doklasyfikowania w 10.2). Pobranie zdjęć + import
+  (embeddingi Titan, ~kilka zł) — **czeka na zgodę** (opcje: całość / wybrani vendorzy / partiami).
 - `scripts/scrape-maxfliz.mjs`: paginacja `/products.json?limit=250&page=N` (1 req/s) → **wszyscy vendorzy, całość**
   → `rawdata/maxfliz/collection.json` + zdjęcia (pobrane z CDN). Mapowanie (lokalnie, bez Bedrock): `vendor`→manufacturer,
   kod z tytułu→`manufacturer_code`, opis/`vendor`/tagi→`category`+`subtype`, warianty/opcje→`group_id`, `source='web'`.
@@ -684,7 +687,9 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
 
 ### Faza 11 — Źródła danych jako usuwalne partie + import w GUI + analiza PDF z GUI
 
-**Krok 11.1 — Dane jako usuwalny/odnawialny zakres („źródło")**
+**Krok 11.1 — Dane jako usuwalny/odnawialny zakres („źródło")** — ✅ ZROBIONE (wdrożone)
+- `DELETE /catalogs/{id}` (kaskada produktów+zdjęć + sprzątanie S3: crops, pdf, `pages/`, export) — admin. `ImportPage`:
+  sekcja **„Źródła w bazie"** (lista + „Usuń źródło" + „Eksport"). Zweryfikowane: 401 bez tokena, usuwa z tokenem admina.
 - Każdy import = **źródło** = wiersz `catalogs` (`source` + nazwa + data). maxfliz: `source='web'`
   („maxfliz — oferta publiczna"); katalogi PDF: `source='catalog'`. Produkty pod źródłem (`catalog_id`).
 - `DELETE /catalogs/{id}` (kaskada produktów + `product_images` + sprzątanie S3) → **usunięcie całego zakresu**;
