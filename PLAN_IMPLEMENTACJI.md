@@ -744,6 +744,33 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
 **Stan bazy po Fazach 10–11:** **1783 produkty, 4743 zdjęcia (100% z embeddingiem), 8 źródeł** — web (maxfliz): oświetlenie 869 +
 łazienka 779; catalog (MAXLIVING): 135 (6 katalogów tematycznych).
 
+### Faza 12 — UX wyszukiwania: multi-produkt, podpowiedź kontekstu, PDF
+
+**Krok 12.1 — Multi-produkt (kilka obszarów → kilka list)** — ✅ ZROBIONE (wdrożone, frontend-only)
+- `SearchPage`: wykryte produkty **numerowane** (chipy + kropkowana nakładka-podpowiedź na obrazie), **wielokrotny wybór**.
+  „Szukaj zaznaczonych (N)" → N równoległych `/search` → **osobna sekcja wyników na produkt** (własna bramka, rerank,
+  „wczytaj kolejne", diagnostyka admina). Ręczny kadr zachowany („Szukaj tego kadru" + pole „czego szukasz?").
+- Reużywa istniejącego `/search` (bez backendu/danych/modelu). Koszt = N× wyszukiwanie.
+- **Fix UX (po teście):** nakładki detekcji są nieklikane/przerywane (tylko podpowiedź) — nie mylą się z kadrem i nie
+  blokują przeciągania ReactCrop; jasne rozróżnienie „szybko (auto-ramki)" vs „precyzyjnie (własny kadr)".
+
+**Krok 12.2 — Podpowiedź kontekstu (anti-background)** — ✅ ZROBIONE (wdrożone)
+- Problem: kadr ze stolikiem na 1. planie + meble w tle → opis łapał tło (zła kategoria). Naprawa: `/search` przyjmuje
+  `hint` (etykieta detekcji / pole „czego szukasz?"). `_describe_query` naprowadza opis na wskazany obiekt („tło ignoruj").
+  **Sygnał miękki** — finalną kategorię ustala model (odporność na błędną detekcję).
+
+**Krok 12.3 — PDF podsumowania wyszukiwania** — 🟡 CZĘŚCIOWO (widok do druku zrobiony; tabelka z selekcją do zrobienia)
+- ✅ „Drukuj / zapisz PDF": samodzielny widok do druku (nowe okno, zdjęcia jako `<img>`, auto-print; sekcja per produkt,
+  %, kod/SKU, odniesienie do katalogu). 0 kosztów, bez CORS.
+- 📐 **DO ZROBIENIA (na później, gdy priorytet): PDF jako TABELA z ręczną selekcją.** Z zaproponowanych produktów pracownik
+  **zaznacza (checkbox)** te, które chce → trafiają do **tabelki** w PDF. Minimalny zestaw kolumn (miniatura/nazwa/kod-SKU/
+  producent/odniesienie) + **link referencyjny** (do produktu na maxfliz / strony katalogu). Prawdopodobnie spięte ze
+  „Schowkiem" (już zbiera kandydatów) — selekcja = źródło tabeli. Frontend-only (druk/HTML). Bez cen.
+
+**Krok 12.4 — F2: wzbogacenie kontekstu dodatkowym źródłem (rysunek techniczny / wymiary)** — 📐 ZAPLANOWANE
+- F2a (typ/kształt z rysunku — bez przepisania danych) → F2b (wymiary — wymaga backfillu wymiarów do `params`, lokalnie/0 Bedrock).
+  Wymiary jako sygnał **miękki**, nigdy twardy filtr. Anti-halucynacja: ekstrahuj tylko czytelne, transparentnie pokaż odczyt. (Szczegóły w rozmowie/analizie.)
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)

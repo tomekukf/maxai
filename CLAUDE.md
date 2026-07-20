@@ -111,6 +111,11 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   import + instrukcja w GUI. 11.3 **onboarding PDF = instrukcja w GUI** (Dokumentacja) + wiedza w kontekście Claude +
   ręczna orchestracja (komendy); **bez** wyzwalania analizy z przeglądarki (webowe GUI nie odpali lokalnego Pythona/LLM).
   Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 11.
+- 🚧 **Faza 12 — UX wyszukiwania (w toku).** ✅ 12.1 multi-produkt (numerowane wykrycia, wielokrotny wybór → kilka list
+  wyników; nakładki to nieklikane podpowiedzi, kadr ReactCrop swobodny). ✅ 12.2 podpowiedź kontekstu (`/search` przyjmuje
+  `hint` = etykieta detekcji / „czego szukasz?" → `_describe_query` naprowadza na właściwy obiekt, tło ignoruje; miękko).
+  🟡 12.3 PDF: widok do druku zrobiony; **PDF-tabelka z ręczną selekcją produktów (+ link ref) — zaplanowane (na później)**.
+  📐 12.4 F2 (rysunek techniczny/wymiary) — zaplanowane. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 12.
 - ▶️ Następne (do rozważenia): dokończenie importu maxfliz (płytki/dywany/tapety/podłogi/drzwi/sztukateria/lustro — za zgodą, koszt Titan);
   Faza 8.5 (generowanie i zapis opisów wizualnych `attributes` lokalnie); ew. dedykowany endpoint `/stats` (dziś statystyki liczone
   przez pełny skan `slim` z frontu).

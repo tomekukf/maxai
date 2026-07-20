@@ -391,8 +391,10 @@ export default function SearchPage() {
                 </div>
               )}
               <p className="text-xs text-slate-500">
-                Zaznacz jeden lub więcej produktów i użyj „Szukaj zaznaczonych" — dostaniesz osobną listę dla każdego.
-                Ikoną ✎ wczytasz ramkę do ręcznej korekty.
+                <b>Szybko:</b> zaznacz produkty na liście → „Szukaj zaznaczonych" (używa <b>automatycznych</b> ramek, kropkowanych na obrazie).
+                <br />
+                <b>Precyzyjnie:</b> narysuj/popraw ramkę myszą na obrazie (albo wczytaj ikoną ✎) → „Szukaj tego kadru".
+                Kropkowane ramki to tylko podpowiedź — kadr rysujesz i przesuwasz swobodnie.
               </p>
             </div>
 
@@ -407,23 +409,22 @@ export default function SearchPage() {
                   style={{ maxWidth: DISPLAY_MAX, display: 'block' }}
                 />
               </ReactCrop>
+              {/* Nakładka = tylko PODPOWIEDŹ (nieklikana, przerywana), żeby nie mylić z kadrem i nie blokować przeciągania. */}
               <div className="pointer-events-none absolute inset-0">
                 {items.map((it, i) => (
                   <div
                     key={i}
-                    className={'absolute border-2 ' + (selected.has(i) ? 'border-brand' : 'border-white/70')}
+                    className={'absolute border border-dashed ' + (selected.has(i) ? 'border-brand' : 'border-white/80')}
                     style={{ left: `${it.box.x * 100}%`, top: `${it.box.y * 100}%`, width: `${it.box.w * 100}%`, height: `${it.box.h * 100}%` }}
                   >
-                    <button
-                      onClick={() => toggleSelect(i)}
+                    <span
                       className={
-                        'pointer-events-auto absolute -left-1 -top-3 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold shadow ' +
-                        (selected.has(i) ? 'bg-brand text-white' : 'bg-white text-slate-700')
+                        'absolute -left-0.5 -top-3 rounded px-1 text-[11px] font-bold shadow ' +
+                        (selected.has(i) ? 'bg-brand text-white' : 'bg-white/90 text-slate-700')
                       }
-                      title="Zaznacz do wyszukania"
                     >
                       {i + 1}
-                    </button>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -435,7 +436,7 @@ export default function SearchPage() {
               </button>
               <span className="flex items-center gap-2">
                 <button onClick={searchManualCrop} disabled={anyBusy || !completedCrop} className={navBtn}>
-                  Szukaj ręcznego kadru
+                  Szukaj tego kadru
                 </button>
                 <input
                   value={manualHint}
