@@ -1,13 +1,18 @@
-// Import kolekcji maxfliz do AWS (Faza 10.1). Czyta rawdata/maxfliz/collection.json,
-// filtruje po kategorii (CATEGORY), pobiera zdjęcia z CDN → presign → S3 → POST /products.
-// Sam odświeża token (Cognito REST, USER_PASSWORD_AUTH) — długi przebieg nie urwie się po 60 min.
+// Import kolekcji do AWS (Faza 10.1). Czyta collection.json (env COLLECTION), zdjęcia z CDN (im.src)
+// LUB lokalne (im.file z <dir>/images/), → presign → S3 → POST /products. Auto-refresh tokena.
 // BEZ CEN. describe:false (bez Sonnet). Embedding = Titan w Lambdzie /products.
 //
 // Użycie (git-bash):
-//   API_URL=... COGNITO_CLIENT_ID=... ADMIN_PASSWORD=... [ADMIN_USER=admin] [CATEGORY=oswietlenie] [LIMIT=0] node scripts/seed-maxfliz.mjs
+//   API_URL=... COGNITO_CLIENT_ID=... ADMIN_PASSWORD=... \
+//   [COLLECTION=rawdata/maxfliz/collection.json] [CATEGORY=] [PDF_KEY=] [CATALOG_NAME=] [LIMIT=0] node scripts/seed-maxfliz.mjs
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
-const CATEGORY = process.env.CATEGORY ?? 'oswietlenie';
+const COLLECTION = process.env.COLLECTION ?? 'rawdata/maxfliz/collection.json';
+const IMG_DIR = join(dirname(COLLECTION), 'images');
+const CATEGORY = process.env.CATEGORY ?? ''; // pusty = wszystkie produkty z pliku
+const PDF_KEY = process.env.PDF_KEY ?? null; // s3 key PDF katalogu (do linku „otwórz stronę")
+const CATALOG_NAME = process.env.CATALOG_NAME ?? null;
 const LIMIT = Number(process.env.LIMIT ?? 0);
 const REGION = process.env.COGNITO_REGION ?? 'eu-central-1';
 const API = process.env.API_URL;
@@ -31,7 +36,7 @@ const AUTH = () => ({ authorization: `Bearer ${TOKEN}`, 'content-type': 'applica
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function presignPut(filename, bytes) {
-  const pr = await fetch(`${API}/uploads/presign`, { method: 'POST', headers: AUTH(), body: JSON.stringify({ filename, prefix: 'products/maxfliz' }) });
+  const pr = await fetch(`${API}/uploads/presign`, { method: 'POST', headers: AUTH(), body: JSON.stringify({ filename, prefix: 'products/import' }) });
   if (!pr.ok) throw new Error(`presign ${pr.status}`);
   const { uploadUrl, key } = await pr.json();
   const put = await fetch(uploadUrl, { method: 'PUT', body: bytes });
@@ -39,14 +44,24 @@ async function presignPut(filename, bytes) {
   return key;
 }
 
+async function imgBytes(im) {
+  if (im.src) return Buffer.from(await (await fetch(im.src, { headers: { 'user-agent': 'maxai-catalog-sync/1.0' } })).arrayBuffer());
+  return readFileSync(join(IMG_DIR, im.file)); // zdjęcie lokalne
+}
+
 async function main() {
-  const all = JSON.parse(readFileSync('rawdata/maxfliz/collection.json', 'utf8')).products;
-  let products = all.filter((p) => p.category === CATEGORY);
+  const pkg = JSON.parse(readFileSync(COLLECTION, 'utf8'));
+  const meta = pkg.catalog ?? {};
+  let products = pkg.products;
+  if (CATEGORY) products = products.filter((p) => p.category === CATEGORY);
   if (LIMIT) products = products.slice(0, LIMIT);
-  console.log(`API=${API}\nKategoria=${CATEGORY} → ${products.length} produktów (z ${all.length})`);
+  console.log(`API=${API}\nPlik=${COLLECTION} | ${products.length} produktów${CATEGORY ? ` (kat=${CATEGORY})` : ''}`);
   await login();
 
-  const cr = await fetch(`${API}/catalogs`, { method: 'POST', headers: AUTH(), body: JSON.stringify({ name: `maxfliz — ${CATEGORY}`, manufacturer: 'maxfliz', domainCategory: CATEGORY }) });
+  const cr = await fetch(`${API}/catalogs`, { method: 'POST', headers: AUTH(), body: JSON.stringify({
+    name: CATALOG_NAME || meta.name || 'import', manufacturer: meta.manufacturer || null,
+    domainCategory: meta.domainCategory || CATEGORY || null, pdfKey: PDF_KEY,
+  }) });
   const { id: catalogId } = await cr.json();
   console.log(`catalogId=${catalogId}`);
 
@@ -58,9 +73,7 @@ async function main() {
       const images = [];
       for (const im of p.images) {
         try {
-          const r = await fetch(im.src, { headers: { 'user-agent': 'maxai-catalog-sync/1.0' } });
-          if (!r.ok) { imgErr++; continue; }
-          const key = await presignPut(im.file, Buffer.from(await r.arrayBuffer()));
+          const key = await presignPut(im.file, await imgBytes(im));
           images.push({ key, sortOrder: im.sortOrder ?? 0 });
         } catch { imgErr++; }
       }
@@ -69,9 +82,9 @@ async function main() {
         method: 'POST', headers: AUTH(),
         body: JSON.stringify({
           name: p.name, manufacturer: p.manufacturer,
-          manufacturerCode: p.manufacturerCode || p.params?.handle, // handle = stabilny klucz dedup gdy brak kodu
-          source: 'web', category: p.category, subtype: p.subtype, groupId: p.group_id,
-          catalogId, params: p.params ?? {}, describe: false, images,
+          manufacturerCode: p.manufacturerCode || p.params?.handle || null,
+          source: p.source || 'catalog', category: p.category, subtype: p.subtype, groupId: p.group_id,
+          catalogId, catalogPage: p.catalogPage, params: p.params ?? {}, describe: false, images,
         }),
       });
       const j = await res.json();
