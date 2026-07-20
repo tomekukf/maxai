@@ -503,7 +503,8 @@ administracji rozwiązaniem + statystyki).
 **Krok 7.1 — Panel handlowca (user)** — ✅ ZROBIONE
 - Zakładki: **Wyszukiwanie** (z „wczytaj kolejne"/„dlaczego podobne" z Fazy 6) + **Katalog** w trybie
   read-only (`CatalogPage admin={false}` — bez usuwania/edycji; podgląd, szukanie, link do katalogu).
-- (Opc. na później) schowek ofertowy + historia — nie zrobione.
+- ✅ **Schowek ofertowy** (`lib/shortlist.ts` + `ShortlistPage`, localStorage): „Do schowka" w wynikach i podglądzie,
+  zakładka „Schowek (N)", „Kopiuj listę" do oferty. (Historia wyszukiwań — nadal opcjonalna.)
 - **Logowanie (aktualizacja):** cała aplikacja wymaga logowania (konto handlowca `handlowiec` lub admin);
   „Admin →" widoczne tylko dla grupy `admin`. Konto handlowca: `user` (grupa `handlowiec`). Gate frontendu +
   tożsamość; API GET/`/search` nadal publiczne (twardo chronione tylko operacje admina — Krok 7.4).
