@@ -8,6 +8,7 @@ imageUrl to presigned GET (do podglądu w UI). Sygnał główny: podobieństwo w
 import base64
 import json
 import os
+import re
 import ssl
 
 import boto3
@@ -253,42 +254,71 @@ def _rerank(query_bytes, cands, query_attrs=None):
             }
         )
         print(f"[rerank] start: cands={len(cands)}, zdjec_kandydatow={imgs}, model={RERANK_MODEL_ID}")
-        out = bedrock.converse(
-            modelId=RERANK_MODEL_ID,
-            messages=[{"role": "user", "content": content}],
-            inferenceConfig={"maxTokens": 600, "temperature": 0},
-        )
-        raw = out["output"]["message"]["content"][0]["text"]
-        print(f"[rerank] odpowiedz: {raw[:400]}")
-        data = _parse_json(raw)
-        if isinstance(data, dict) and data.get("uzasadnienie"):
-            print(f"[rerank] uzasadnienie: {data['uzasadnienie']}")
-        wyniki = data.get("wyniki") if isinstance(data, dict) else None
-        if isinstance(wyniki, list):
-            order, scores, reasons = [], {}, {}
-            for w in wyniki:
-                if not isinstance(w, dict):
-                    continue
-                try:
-                    i = int(w.get("i"))
-                except (TypeError, ValueError):
-                    continue
-                if not (0 <= i < len(cands)) or i in scores:
-                    continue
-                order.append(i)
-                try:
-                    scores[i] = max(0, min(100, int(round(float(w.get("dopasowanie"))))))
-                except (TypeError, ValueError):
-                    scores[i] = None
-                if w.get("powod"):
-                    reasons[i] = str(w.get("powod"))[:200]
-            print(f"[rerank] ranking={order}, oceny={scores}")
-            if order:
+        # maxTokens hojnie (koniec ucinania JSON przy wielu kandydatach) + 1 retry (transient/parse).
+        for attempt in range(2):
+            out = bedrock.converse(
+                modelId=RERANK_MODEL_ID,
+                messages=[{"role": "user", "content": content}],
+                inferenceConfig={"maxTokens": 2000, "temperature": 0},
+            )
+            stop = out.get("stopReason")
+            raw = out["output"]["message"]["content"][0]["text"]
+            print(f"[rerank] proba={attempt + 1} stopReason={stop} odpowiedz={raw[:400]}")
+            parsed = _parse_rerank(raw, len(cands))
+            if parsed:
+                order, scores, reasons = parsed
+                print(f"[rerank] ranking={order}, oceny={scores}")
                 return order, scores, reasons
-        print("[rerank] brak poprawnych wynikow -> fallback wizualny")
+            print(f"[rerank] proba={attempt + 1}: brak poprawnych wynikow (stopReason={stop})")
     except Exception as e:  # noqa: BLE001
         print(f"[rerank] BLAD: {e}")
+    print("[rerank] fallback wizualny (kolejność kosinusowa)")
     return list(range(len(cands))), {}, {}
+
+
+def _parse_rerank(raw, n):
+    """Zamień odpowiedź sędziego na (order, scores, reasons). Odporne na ucięty JSON:
+    gdy pełne parsowanie zawiedzie, odzyskujemy kompletne obiekty wyników regexem."""
+    data = _parse_json(raw)
+    if isinstance(data, dict) and data.get("uzasadnienie"):
+        print(f"[rerank] uzasadnienie: {data['uzasadnienie']}")
+    wyniki = data.get("wyniki") if isinstance(data, dict) else None
+    if not isinstance(wyniki, list) or not wyniki:
+        wyniki = _salvage_rerank_items(raw)  # ratunek z (potencjalnie uciętego) tekstu
+    if not isinstance(wyniki, list) or not wyniki:
+        return None
+    order, scores, reasons = [], {}, {}
+    for w in wyniki:
+        if not isinstance(w, dict):
+            continue
+        try:
+            i = int(w.get("i"))
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= i < n) or i in scores:
+            continue
+        order.append(i)
+        try:
+            scores[i] = max(0, min(100, int(round(float(w.get("dopasowanie"))))))
+        except (TypeError, ValueError):
+            scores[i] = None
+        if w.get("powod"):
+            reasons[i] = str(w.get("powod"))[:200]
+    return (order, scores, reasons) if order else None
+
+
+# Wyłuskuje kompletne obiekty {"i":..,"dopasowanie":..,"powod":".."} nawet gdy całość JSON jest ucięta.
+_RERANK_ITEM_RE = re.compile(
+    r'"i"\s*:\s*(\d+)\s*,\s*"dopasowanie"\s*:\s*(\d+)(?:\s*,\s*"powod"\s*:\s*"([^"]*)")?'
+)
+
+
+def _salvage_rerank_items(raw):
+    items = [{"i": int(m.group(1)), "dopasowanie": int(m.group(2)), "powod": m.group(3) or ""}
+             for m in _RERANK_ITEM_RE.finditer(raw or "")]
+    if items:
+        print(f"[rerank] odzyskano {len(items)} wynikow z uciętej/niepełnej odpowiedzi")
+    return items
 
 
 def lambda_handler(event, _ctx):
