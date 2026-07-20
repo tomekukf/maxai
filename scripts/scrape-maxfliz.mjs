@@ -36,15 +36,17 @@ const VENDOR_CAT = {
 };
 
 // Reguły słów kluczowych (priorytet nad vendorem) — najbardziej specyficzne najpierw.
+// Kolejność = priorytet. UWAGA: oświetlenie PRZED podłogami/stołami, bo „LAMPA PODŁOGOWA"/„lampa stołowa"
+// nie mogą trafić do 'podlogi'/'stol'. Reguły oświetlenia wymagają słowa „lampa/kinkiet/…".
 const TITLE_RULES = [
   [/\blustr/, 'lustro'],
   [/\bdrzwi\b/, 'drzwi'],
-  [/\bumywalk|bateri|prysznic|wanna|brodzik|bidet|wc\b|misk|desk[ai] |st[eé]la\b|syfon|odpływ|kabina/, 'lazienka'],
+  [/\blamp|kinkiet|żyrandol|plafon|reflektor|oczko|oprawa|led\b/, 'oswietlenie'],
+  [/\bumywalk|bateri|prysznic|wanna|brodzik|bidet|wc\b|miska|deska wc|deski wc|deska sedes|stelaż|syfon|odpływ|kabina prysznic|deszczownic/, 'lazienka'],
   [/\bpłytk|gres|mozaik|terakot|klinkier/, 'plytki'],
-  [/\bpanel|podłog|deska podłog|winyl|laminat/, 'podlogi'],
-  [/\bsztukateri|rozet|listw|profil|gzyms|filar|sztukater/, 'sztukateria'],
+  [/\bpodłog|deska podłog|winyl|laminat|panel podłog/, 'podlogi'],
+  [/\bsztukateri|rozet|listw|profil|gzyms|filar/, 'sztukateria'],
   [/\btapet|fototapet|okleina|farba|farby/, 'tapety'],
-  [/\blamp|kinkiet|żyrandol|plafon|reflektor|oczko|led\b/, 'oswietlenie'],
   [/\bsofa|kanapa|naroż/, 'sofa'],
   [/\bfotel/, 'fotel'],
   [/\bkrzes|hoker|taboret/, 'krzeslo'],
