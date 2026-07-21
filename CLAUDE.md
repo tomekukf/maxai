@@ -105,11 +105,13 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ **Paginacja katalogu (wdrożona, poza numeracją faz).** `GET /products` z `limit`/`offset` + `total`, filtry server-side
   (`q`, `category`, `source`) + tryb `slim` (bez presignów, do statystyk); presign tylko widocznej strony. `CatalogPage` „Pokaż więcej"
   + wyszukiwarka/kategoria po stronie serwera (koniec ładowania 1908 rekordów naraz); `StatsPage` skanuje bazę w trybie `slim`.
-- 🎉 **Import danych — stan bazy: 1783 produkty, 4743 zdjęcia (wszystkie z embeddingiem), 8 usuwalnych źródeł.**
-  web (maxfliz): oświetlenie 869 + łazienka 779. catalog (MAXLIVING, 6 katalogów tematycznych): 135 (łóżka 37,
-  sofy/narożniki 37, krzesła 17, stoły/stoliki 15, skrzyniowe 15, fotele 14). Każde źródło z linkiem do strony katalogu (JPEG w S3).
-  **Uwaga:** zbiorczy katalog „MAXLIVING — meble 2026" (125) usunięty jako duplikat tematycznych (116/117 nazw się pokrywało;
-  tematyczne to nadzbiór z czystszą kategoryzacją per temat — zniknęła generyczna kat. `mebel`).
+- 🎉 **Import danych UKOŃCZONY — stan bazy: 3879 produktów, 10874 zdjęcia (100% z embeddingiem), 23 usuwalne źródła.**
+  **maxfliz (web, cała oferta publiczna, 17 źródeł):** płytki 1306, oświetlenie 869, łazienka 779, dywany 180, sztukateria 147,
+  meble 98, tapety 63, sofy 62, podłogi 62, stoliki 54, krzesła 44, fotele 25, drzwi 23, komody 14, szafki 10, lustra 5, regały 3.
+  **MAXLIVING (catalog, 6 katalogów tematycznych): 135.** Każde źródło usuwalne (`DELETE /catalogs/{id}`), z linkiem do strony
+  (MAXLIVING). Import per kategoria (`seed-maxfliz.mjs`, `CATALOG_ID` = wznowienie po przerwaniu; dedup po SKU). Błędy: 2 produkty
+  (brak/zły obraz). **Uwaga:** zbiorczy „MAXLIVING — meble 2026" (125) usunięty jako duplikat tematycznych.
+  ⏳ Opisy wizualne (`attributes`, Faza 8.5) do dogenerowania lokalnie dla świeżo zaimportowanych (fetch bierze tylko nieopisane).
 - 📐 **Faza 11 — źródła jako usuwalne partie + import/analiza z GUI (zaplanowana).** 11.1 dane jako „źródło"
   (`catalogs`+`source`, `DELETE /catalogs/{id}` kaskada → łatwe wipe & re-import, lista źródeł w GUI). 11.2 dedykowany
   import + instrukcja w GUI. 11.3 **onboarding PDF = instrukcja w GUI** (Dokumentacja) + wiedza w kontekście Claude +

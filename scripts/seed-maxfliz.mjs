@@ -58,12 +58,16 @@ async function main() {
   console.log(`API=${API}\nPlik=${COLLECTION} | ${products.length} produktów${CATEGORY ? ` (kat=${CATEGORY})` : ''}`);
   await login();
 
-  const cr = await fetch(`${API}/catalogs`, { method: 'POST', headers: AUTH(), body: JSON.stringify({
-    name: CATALOG_NAME || meta.name || 'import', manufacturer: meta.manufacturer || null,
-    domainCategory: meta.domainCategory || CATEGORY || null, pdfKey: PDF_KEY,
-  }) });
-  const { id: catalogId } = await cr.json();
-  console.log(`catalogId=${catalogId}`);
+  // CATALOG_ID = dopisz do istniejącego źródła (wznowienie po przerwaniu; dedup pomija już wgrane).
+  let catalogId = process.env.CATALOG_ID || null;
+  if (!catalogId) {
+    const cr = await fetch(`${API}/catalogs`, { method: 'POST', headers: AUTH(), body: JSON.stringify({
+      name: CATALOG_NAME || meta.name || 'import', manufacturer: meta.manufacturer || null,
+      domainCategory: meta.domainCategory || CATEGORY || null, pdfKey: PDF_KEY,
+    }) });
+    catalogId = (await cr.json()).id;
+  }
+  console.log(`catalogId=${catalogId}${process.env.CATALOG_ID ? ' (istniejący, wznowienie)' : ''}`);
 
   let ok = 0, dup = 0, err = 0, imgErr = 0;
   for (let i = 0; i < products.length; i++) {

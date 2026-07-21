@@ -654,12 +654,13 @@ pozwala, `Crawl-delay: 1`). Oferta publiczna = to, co na stronie; oferta niepubl
 MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per produkt: tytuł (często z kodem),
 `vendor`, wszystkie zdjęcia (CDN), opis (`body_html`), warianty. **Cen nie używamy.**
 
-**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)** — ✅ NARZĘDZIE + IMPORT CZĘŚCIOWY (oświetlenie + łazienka)
-- Stan: `scrape-maxfliz.mjs` gotowy i przetestowany; pełny zaciąg metadanych = **3749 produktów** (płytki 1310,
-  oświetlenie 872, dywany 180, meble ~218, **inne 1169** — do doklasyfikowania w 10.2).
-- ✅ **Zaimportowane do bazy:** oświetlenie **869** + łazienka **779** (zdjęcia + embeddingi Titan, `source='web'`).
-  Reszta (płytki/dywany/tapety/podłogi/drzwi/sztukateria/lustro/meble) — pobranie zdjęć + import Titan **czeka na zgodę**
-  (opcje: całość / wybrani vendorzy / partiami).
+**Krok 10.1 — Narzędzie: pełny zaciąg oferty publicznej maxfliz (temat 1)** — ✅ UKOŃCZONE (cała oferta zaimportowana)
+- Stan: `scrape-maxfliz.mjs` gotowy; pełny zaciąg = **3746 produktów**.
+- ✅ **Zaimportowane WSZYSTKIE kategorie** (`source='web'`, zdjęcia + embeddingi Titan), każda jako osobne usuwalne źródło
+  „maxfliz — <kat>": płytki 1306, oświetlenie 869, łazienka 779, dywany 180, sztukateria 147, meble 98, tapety 63, sofy 62,
+  podłogi 62, stoliki 54, krzesła 44, fotele 25, drzwi 23, komody 14, szafki 10, lustra 5, regały 3. Błędy: 2 (brak/zły obraz).
+- `seed-maxfliz.mjs`: `CATEGORY` (per kategoria) + `CATALOG_NAME`; **`CATALOG_ID` = wznowienie po przerwaniu** (dedup po SKU
+  pomija już wgrane — odporne na crash; płytki 1307 wgrane w 2 turach 718+588). Import w tle, token auto-refresh co 250.
 - `scripts/scrape-maxfliz.mjs`: paginacja `/products.json?limit=250&page=N` (1 req/s) → **wszyscy vendorzy, całość**
   → `rawdata/maxfliz/collection.json` + zdjęcia (pobrane z CDN). Mapowanie (lokalnie, bez Bedrock): `vendor`→manufacturer,
   kod z tytułu→`manufacturer_code`, opis/`vendor`/tagi→`category`+`subtype`, warianty/opcje→`group_id`, `source='web'`.
@@ -741,8 +742,8 @@ MAXLIGHT = **oświetlenie**, MAXDIVANI/NICOLETTI/BONTEMPI = **meble**); dane per
   bierzemy katalogi tematyczne, NIE zbiorczy.**
 - ✅ Weryfikacja: kadr fotela → kategoria `fotel` → produkty MAXLIVING z linkiem do strony; 0 błędów/duplikatów.
 
-**Stan bazy po Fazach 10–11:** **1783 produkty, 4743 zdjęcia (100% z embeddingiem), 8 źródeł** — web (maxfliz): oświetlenie 869 +
-łazienka 779; catalog (MAXLIVING): 135 (6 katalogów tematycznych).
+**Stan bazy po Fazach 10–11 (import UKOŃCZONY):** **3879 produktów, 10874 zdjęcia (100% z embeddingiem), 23 źródła** —
+maxfliz (web, cała oferta, 17 źródeł) = 3744; MAXLIVING (catalog, 6 tematycznych) = 135.
 
 ### Faza 12 — UX wyszukiwania: multi-produkt, podpowiedź kontekstu, PDF
 
