@@ -31,7 +31,11 @@ await c.connect();
 
 const where = ["(pi.attributes IS NULL OR pi.attributes::text = '{}')"];
 const params = [];
-if (CATEGORY) { params.push(CATEGORY); where.push(`p.category = $${params.length}`); }
+if (CATEGORY) {
+  const cats = CATEGORY.split(',').map((x) => x.trim()).filter(Boolean);
+  params.push(cats);
+  where.push(`p.category = ANY($${params.length})`);
+}
 if (NAME_LIKE) {
   params.push(`%${NAME_LIKE.toLowerCase()}%`);
   where.push(`lower(p.name) LIKE $${params.length}`);
