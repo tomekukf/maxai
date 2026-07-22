@@ -64,6 +64,26 @@ function cropToBase64(
   return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
+// Miniatura wycinka (do panelu podpowiedzi) — pełny data URL, przeskalowana do `max` px.
+function thumbFromNatural(
+  image: HTMLImageElement,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+  max = 200,
+): string | null {
+  if (sw < 4 || sh < 4) return null;
+  const scale = Math.min(1, max / Math.max(sw, sh));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(sw * scale));
+  canvas.height = Math.max(1, Math.round(sh * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
+
 // Wyniki jednego wyszukiwania (jeden produkt). Kilka grup = kilka list obok siebie.
 type SearchGroup = {
   key: string;
@@ -122,6 +142,7 @@ export default function SearchPage() {
   const [pageImg, setPageImg] = useState<string | null>(null);
 
   const [items, setItems] = useState<DetectedItem[]>([]);
+  const [thumbs, setThumbs] = useState<string[]>([]); // miniatury wykrytych produktów (panel po prawej)
   const [hiddenCount, setHiddenCount] = useState(0); // odfiltrowane (kategoria spoza bazy)
   const [dbCats, setDbCats] = useState<Set<string> | null>(null);
   const [detecting, setDetecting] = useState(false);
@@ -150,8 +171,21 @@ export default function SearchPage() {
     getCategories().then((cs) => setDbCats(new Set(cs.map((c) => c.category)))).catch(() => {});
   }, []);
 
+  // Miniatury podpowiedzi — liczone lokalnie z wgranego obrazu (bez kosztów, bez sieci).
+  useEffect(() => {
+    const image = imgRef.current;
+    if (!image || !items.length) {
+      setThumbs([]);
+      return;
+    }
+    const nw = image.naturalWidth;
+    const nh = image.naturalHeight;
+    setThumbs(items.map((it) => thumbFromNatural(image, it.box.x * nw, it.box.y * nh, it.box.w * nw, it.box.h * nh) ?? ''));
+  }, [items]);
+
   function resetForNewImage() {
     setItems([]);
+    setThumbs([]);
     setHiddenCount(0);
     setActiveItem(null);
     setCrop(undefined);
@@ -252,6 +286,14 @@ export default function SearchPage() {
     setCompletedCrop(c);
     if (activeItem != null && c.width >= 5 && c.height >= 5) {
       setCropByItem((m) => new Map(m).set(activeItem, c));
+      // Miniatura w panelu ma pokazywać to, co realnie pójdzie do analizy (poprawiony kadr).
+      const image = imgRef.current;
+      if (image) {
+        const sx = image.naturalWidth / image.width;
+        const sy = image.naturalHeight / image.height;
+        const t = thumbFromNatural(image, c.x * sx, c.y * sy, c.width * sx, c.height * sy);
+        if (t) setThumbs((ts) => ts.map((old, i) => (i === activeItem ? t : old)));
+      }
     }
   }
 
@@ -366,12 +408,13 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <main className="mx-auto max-w-4xl space-y-5 px-4 py-6">
+      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
         <div>
           <h2 className="text-lg font-semibold">Wyszukiwanie substytutów</h2>
           <p className="text-sm text-slate-500">
-            Wgraj wizualizację (PDF) lub zdjęcie. Model podpowie wykryte meble — kliknij podpowiedź,
-            popraw ramkę i szukaj. Możesz też zaznaczyć dowolny fragment ręcznie.
+            Wgraj wizualizację (PDF) lub zdjęcie — analiza rusza automatycznie. Po prawej zaznacz
+            checkboxami, które wykryte produkty wysłać do wyszukania. Możesz też zaznaczyć dowolny
+            fragment ręcznie na obrazie.
           </p>
         </div>
 
@@ -428,89 +471,45 @@ export default function SearchPage() {
         )}
 
         {pageImg && (
-          <>
-            {/* podpowiedzi wykrytych produktów — numerowane, wielokrotny wybór */}
-            <div className="space-y-1">
-              <div className="text-sm font-medium">
-                Wykryte produkty {detecting && <span className="text-slate-400">(analizuję…)</span>}
-                {hiddenCount > 0 && (
-                  <span className="ml-1 font-normal text-slate-400">
-                    ({hiddenCount} spoza asortymentu pominięto)
-                  </span>
-                )}
-              </div>
-              {items.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {items.map((it, i) => (
-                    <button
-                      key={i}
-                      onClick={() => toggleSelect(i)}
-                      title="Kliknij: wczytaj proponowaną ramkę (ruchomą) i zaznacz do wyszukania"
-                      className={
-                        'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ' +
-                        (selected.has(i) ? 'border-brand bg-brand text-white' : 'border-slate-300 hover:bg-slate-100')
-                      }
-                    >
-                      <span className="font-semibold">{numBadge(i + 1)}</span>
-                      {it.label}
-                    </button>
-                  ))}
-                  {items.length > 1 && (
-                    <button
-                      onClick={() => (selected.size ? clearSelection() : setSelected(new Set(items.map((_, i) => i))))}
-                      className="text-xs text-blue-700 hover:underline"
-                    >
-                      {selected.size ? 'Wyczyść zaznaczenie' : 'Zaznacz wszystkie'}
-                    </button>
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            {/* LEWA KOLUMNA: obraz z edytowalnym kadrem + nakładka numerowanych ramek */}
+            <div className="space-y-2">
+              <div className="relative inline-block border bg-white">
+                <ReactCrop crop={crop} onChange={(c) => setCrop(c)} onComplete={(c) => onCropComplete(c)}>
+                  <img
+                    ref={imgRef}
+                    src={pageImg}
+                    alt="wizualizacja"
+                    onLoad={onImgLoad}
+                    style={{ maxWidth: DISPLAY_MAX, display: 'block' }}
+                  />
+                </ReactCrop>
+                {/* Nakładka = tylko PODPOWIEDŹ (nieklikana, przerywana). Aktywny produkt pokazujemy jako ruchomy kadr, nie tu. */}
+                <div className="pointer-events-none absolute inset-0">
+                  {items.map((it, i) =>
+                    i === activeItem ? null : (
+                      <div
+                        key={i}
+                        className={'absolute border border-dashed ' + (selected.has(i) ? 'border-brand' : 'border-white/80')}
+                        style={{ left: `${it.box.x * 100}%`, top: `${it.box.y * 100}%`, width: `${it.box.w * 100}%`, height: `${it.box.h * 100}%` }}
+                      >
+                        <span
+                          className={
+                            'absolute -left-0.5 -top-3 rounded px-1 text-[11px] font-bold shadow ' +
+                            (selected.has(i) ? 'bg-brand text-white' : 'bg-white/90 text-slate-700')
+                          }
+                        >
+                          {i + 1}
+                        </span>
+                      </div>
+                    ),
                   )}
                 </div>
-              )}
-              <p className="text-xs text-slate-500">
-                Kliknij produkt → jego proponowana ramka pojawi się jako <b>ruchomy kadr</b> (przesuń/popraw myszą), potem „Szukaj tego kadru".
-                Zaznacz kilka produktów → „Szukaj zaznaczonych" da osobną listę dla każdego. Kropkowane ramki to tylko podpowiedzi.
-              </p>
-            </div>
-
-            {/* obraz z edytowalnym kadrem + nakładka numerowanych ramek */}
-            <div className="relative inline-block border bg-white">
-              <ReactCrop crop={crop} onChange={(c) => setCrop(c)} onComplete={(c) => onCropComplete(c)}>
-                <img
-                  ref={imgRef}
-                  src={pageImg}
-                  alt="wizualizacja"
-                  onLoad={onImgLoad}
-                  style={{ maxWidth: DISPLAY_MAX, display: 'block' }}
-                />
-              </ReactCrop>
-              {/* Nakładka = tylko PODPOWIEDŹ (nieklikana, przerywana). Aktywny produkt pokazujemy jako ruchomy kadr, nie tu. */}
-              <div className="pointer-events-none absolute inset-0">
-                {items.map((it, i) =>
-                  i === activeItem ? null : (
-                    <div
-                      key={i}
-                      className={'absolute border border-dashed ' + (selected.has(i) ? 'border-brand' : 'border-white/80')}
-                      style={{ left: `${it.box.x * 100}%`, top: `${it.box.y * 100}%`, width: `${it.box.w * 100}%`, height: `${it.box.h * 100}%` }}
-                    >
-                      <span
-                        className={
-                          'absolute -left-0.5 -top-3 rounded px-1 text-[11px] font-bold shadow ' +
-                          (selected.has(i) ? 'bg-brand text-white' : 'bg-white/90 text-slate-700')
-                        }
-                      >
-                        {i + 1}
-                      </span>
-                    </div>
-                  ),
-                )}
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={searchSelected} disabled={anyBusy || selected.size === 0} className={btnPrimary}>
-                {anyBusy ? 'Szukam…' : `Szukaj zaznaczonych${selected.size ? ` (${selected.size})` : ''}`}
-              </button>
-              <span className="flex items-center gap-2">
-                <button onClick={searchManualCrop} disabled={anyBusy || !completedCrop} className={navBtn}>
+              {/* Ręczny kadr — gdy detekcja czegoś nie złapała lub trzeba czegoś innego */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={searchManualCrop} disabled={anyBusy || !completedCrop} className={navBtn + ' text-xs'}>
                   Szukaj tego kadru
                 </button>
                 <input
@@ -520,23 +519,119 @@ export default function SearchPage() {
                   title="Podpowiedź: który obiekt w kadrze jest głównym — pomaga, gdy w tle są inne meble"
                   className="w-52 rounded border border-slate-300 px-2 py-1 text-xs"
                 />
-              </span>
-              <span className="flex items-center gap-1">
                 <label className="flex cursor-pointer items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" title="Dołącz rysunek techniczny / kartę katalogową — doprecyzuje typ/kształt/wymiary (opcjonalnie)">
                   📎 <input type="file" accept="image/*" onChange={(e) => onPickContext(e.target.files?.[0] ?? null)} className="hidden" />
                   {contextName ? `rysunek: ${contextName.slice(0, 18)}` : 'Dołącz rysunek/spec'}
                 </label>
                 {contextB64 && <button onClick={() => onPickContext(null)} className="text-xs text-red-600 hover:underline">usuń</button>}
-              </span>
+              </div>
+              {msg && <div className="text-sm text-red-700">{msg}</div>}
+            </div>
+
+            {/* PRAWA KOLUMNA: podpowiadaczka — co wykryto i co wysłać do analizy */}
+            <aside className="rounded-lg border border-slate-200 bg-white p-3 lg:sticky lg:top-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold">Wykryte produkty</h3>
+                <button
+                  onClick={runDetect}
+                  disabled={detecting}
+                  className="text-xs text-blue-700 hover:underline disabled:opacity-40"
+                  title="Przeanalizuj obraz jeszcze raz"
+                >
+                  {detecting ? 'analizuję…' : '↻ analizuj'}
+                </button>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Zaznacz, które produkty wysłać do wyszukania substytutów.
+              </p>
+
+              {detecting && items.length === 0 && (
+                <div className="mt-3 space-y-2">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex animate-pulse items-center gap-2">
+                      <div className="h-12 w-12 rounded bg-slate-100" />
+                      <div className="h-3 w-32 rounded bg-slate-100" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!detecting && items.length === 0 && (
+                <div className="mt-3 text-xs text-slate-500">
+                  Nic nie wykryto — zaznacz produkt ręcznie na obrazie i użyj „Szukaj tego kadru".
+                </div>
+              )}
+
+              {items.length > 0 && (
+                <ul className="mt-3 max-h-[28rem] space-y-1 overflow-y-auto pr-1">
+                  {items.map((it, i) => (
+                    <li key={i}>
+                      <label
+                        className={
+                          'flex cursor-pointer items-center gap-2 rounded border p-1.5 ' +
+                          (selected.has(i) ? 'border-brand bg-brand/5' : 'border-transparent hover:bg-slate-50')
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.has(i)}
+                          onChange={() => toggleSelect(i)}
+                          className="h-4 w-4 shrink-0 accent-brand"
+                          title="Wyślij ten produkt do analizy"
+                        />
+                        {thumbs[i] ? (
+                          <img src={thumbs[i]} alt="" className="h-12 w-12 shrink-0 rounded border bg-white object-contain" />
+                        ) : (
+                          <div className="h-12 w-12 shrink-0 rounded bg-slate-100" />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">
+                            <span className="font-semibold">{numBadge(i + 1)}</span> {it.label}
+                          </span>
+                          <button
+                            onClick={(e) => { e.preventDefault(); loadIntoCrop(i); }}
+                            className="text-[11px] text-blue-700 hover:underline"
+                            title="Wczytaj ramkę tego produktu jako ruchomy kadr — możesz ją poprawić myszą"
+                          >
+                            popraw kadr
+                          </button>
+                          {activeItem === i && <span className="ml-1 text-[11px] text-slate-400">(edytujesz)</span>}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {items.length > 1 && (
+                <button
+                  onClick={() => (selected.size ? clearSelection() : setSelected(new Set(items.map((_, i) => i))))}
+                  className="mt-2 text-xs text-blue-700 hover:underline"
+                >
+                  {selected.size ? 'Odznacz wszystkie' : 'Zaznacz wszystkie'}
+                </button>
+              )}
+
+              {hiddenCount > 0 && (
+                <div className="mt-2 text-[11px] text-slate-400">{hiddenCount} spoza asortymentu pominięto</div>
+              )}
+
+              <button
+                onClick={searchSelected}
+                disabled={anyBusy || selected.size === 0}
+                className={btnPrimary + ' mt-3 w-full'}
+              >
+                {anyBusy ? 'Szukam…' : `Szukaj zaznaczonych${selected.size ? ` (${selected.size})` : ''}`}
+              </button>
+
               {admin && (
-                <label className="flex cursor-pointer items-center gap-1 text-xs text-slate-600" title="Szybki: ranking po samym cosinusie, bez wizyjnego reranku Sonnet (~darmowy, do porównań). Jakość: pełny rerank.">
+                <label className="mt-2 flex cursor-pointer items-center gap-1 text-xs text-slate-600" title="Szybki: ranking po samym cosinusie, bez wizyjnego reranku Sonnet (~darmowy, do porównań). Jakość: pełny rerank.">
                   <input type="checkbox" checked={fastMode} onChange={(e) => setFastMode(e.target.checked)} className="h-3.5 w-3.5" />
                   Tryb szybki (bez Sonneta)
                 </label>
               )}
-              {msg && <span className="text-sm text-red-700">{msg}</span>}
-            </div>
-          </>
+            </aside>
+          </div>
         )}
 
         {/* Wyniki — osobna sekcja na każdy produkt */}
