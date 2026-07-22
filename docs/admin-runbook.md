@@ -124,5 +124,32 @@ Gdy chcesz zrobić wszystko z konsoli, bez GUI:
 
 ## Koszty
 
-- Realny koszt MVP: kilka–kilkanaście zł/mies. RDS `db.t3.micro` (Free Tier 12 mies., działa 24/7).
+- Największe pozycje: **Sonnet 4.5** (rerank/opis przy każdym `/search` — wysyła zdjęcia kandydatów) i **RDS 24/7**.
+- **Uwaga o Free Tier:** okno 12 mies. liczy się od założenia KONTA (nie instancji), a konto jest wspólne z `liveorganizer`
+  → RDS może już NIE być darmowy (spec `db.t3.micro` jest „eligible", ale okno bywa zamknięte / pula 750 h dzielona).
+  `db.t3.micro` 24/7 ≈ ~$13/mies. + storage 20 GB ≈ ~$1.8. Publiczny IPv4 (linia „VPC") nie jest darmowy.
 - Zawsze aktywny alert budżetowy (`maxai-monthly-5usd`).
+
+## Oszczędzanie: Stop / Start RDS (dev)
+
+Największe realne cięcie na dev = **zatrzymywać RDS, gdy nikt nie korzysta** (płacisz wtedy tylko storage ~$1.8/mies.
+zamiast ~$15). AWS pozwala trzymać stop **do 7 dni** — potem instancja sama wstaje (ograniczenie AWS).
+
+**Wpływ na apkę przy zatrzymanym RDS:** frontend się ładuje, **logowanie działa** (Cognito, nie baza), ale **Wyszukiwanie,
+Katalog, Statystyki, Import przestają działać** (Lambda nie połączy się z bazą). Start trwa ~1–3 min. Zatrzymuj tylko na czas przestoju.
+
+Instancja: `maxaistack-db5d02a0a9-jybapipmxkn3` (region `eu-central-1`).
+
+**Skrypty PowerShell w rootcie projektu** (najprościej):
+```powershell
+.\rds-stop.ps1      # zatrzymaj (oszczędzasz)
+.\rds-start.ps1     # uruchom przed pracą/demem
+.\rds-status.ps1    # sprawdź stan (available / stopped / starting…)
+```
+
+**Albo komendy wprost (AWS CLI):**
+```bash
+aws rds stop-db-instance  --db-instance-identifier maxaistack-db5d02a0a9-jybapipmxkn3 --region eu-central-1
+aws rds start-db-instance --db-instance-identifier maxaistack-db5d02a0a9-jybapipmxkn3 --region eu-central-1
+aws rds describe-db-instances --db-instance-identifier maxaistack-db5d02a0a9-jybapipmxkn3 --region eu-central-1 --query "DBInstances[0].DBInstanceStatus" --output text
+```
