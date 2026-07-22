@@ -131,7 +131,17 @@ Gdy chcesz zrobić wszystko z konsoli, bez GUI:
 - **Uwaga o Free Tier:** okno 12 mies. liczy się od założenia KONTA (nie instancji), a konto jest wspólne z `liveorganizer`
   → RDS może już NIE być darmowy (spec `db.t3.micro` jest „eligible", ale okno bywa zamknięte / pula 750 h dzielona).
   `db.t3.micro` 24/7 ≈ ~$13/mies. + storage 20 GB ≈ ~$1.8. Publiczny IPv4 (linia „VPC") nie jest darmowy.
-- Zawsze aktywny alert budżetowy (`maxai-monthly-5usd`).
+## Ochrona budżetu (limit $20 + auto-odcięcie)
+
+- **Budżet `maxai-monthly-20usd`** (na całe konto): alerty e-mail przy **60/80/90%** (ACTUAL) + **prognozie 100%**.
+- **Auto-odcięcie przy 85% ($17):** akcja budżetu dopina politykę **`maxai-DenyBedrock`** do 4 ról Lambd (Search/Detect/Extract/
+  Products) → Bedrock (Sonnet/Haiku/Titan) przestaje działać → **koszt zmienny się zatrzymuje**. Wyszukiwanie/Detekcja padają;
+  **Katalog i logowanie działają**; RDS zostaje (opcja „a"). ⚠️ **Uwaga:** dane kosztowe AWS mają **opóźnienie ~dobę** — akcja
+  odpala na opóźnionych danych, więc nie jest to stop „co do godziny".
+- **Ręczna kontrola (natychmiastowa, w rootcie):**
+  - `.\budget-lock.ps1` — **teraz** odetnij Bedrock (gdy nie chcesz czekać na AWS).
+  - `.\budget-unlock.ps1` — przywróć Bedrock (po auto-akcji lub locku; **konieczne, by wznowić wyszukiwanie** — auto-akcja sама się nie cofa).
+- Elementy: polityka `maxai-DenyBedrock`, rola `maxai-budget-action-role` (trust: budgets.amazonaws.com).
 
 ## Oszczędzanie: Stop / Start RDS (dev)
 
