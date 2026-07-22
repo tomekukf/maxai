@@ -20,6 +20,8 @@ FILES_BUCKET = os.environ["FILES_BUCKET"]
 DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
 EMBED_MODEL_ID = os.environ["EMBED_MODEL_ID"]
 RERANK_MODEL_ID = os.environ.get("RERANK_MODEL_ID")  # Sonnet 4.5 (rerank; opcjonalne)
+# Opis wycinka + kontekst z rysunku — tańszy Haiku (fallback: to co rerank). Rerank zostaje na Sonnet.
+DESCRIBE_MODEL_ID = os.environ.get("DESCRIBE_MODEL_ID") or RERANK_MODEL_ID
 
 # path-style presigned GET (jak w /uploads/presign — unika 307)
 s3 = boto3.client(
@@ -165,7 +167,7 @@ def _describe_query(image_bytes: bytes, hint: str = None):
     hint (opcjonalny) = etykieta z auto-detekcji, np. 'stolik kawowy'. Naprowadza opis na WŁAŚCIWY
     obiekt, gdy w kadrze jest tło (np. stolik na pierwszym planie + pół kanapy w tle). Sygnał MIĘKKI:
     finalną kategorię i tak ustala model (odporność na błędną detekcję)."""
-    if not RERANK_MODEL_ID:
+    if not DESCRIBE_MODEL_ID:
         return None
     hint = (hint or "").strip()
     if hint:
@@ -179,7 +181,7 @@ def _describe_query(image_bytes: bytes, hint: str = None):
         prompt = "Opisz ten mebel wg schematu (JSON). To wycinek z wizualizacji wnętrza."
     try:
         out = bedrock.converse(
-            modelId=RERANK_MODEL_ID,
+            modelId=DESCRIBE_MODEL_ID,
             system=[{"text": DESCRIBE_SYSTEM}],
             messages=[
                 {
@@ -215,11 +217,11 @@ CONTEXT_SYSTEM = (
 def _extract_context(image_bytes: bytes):
     """Wyciąga PEWNE cechy z dodatkowego źródła (rysunek/spec). Zwraca dict albo None.
     Anti-halucynacja: model raportuje tylko czytelne pola; niepewne → null."""
-    if not RERANK_MODEL_ID:
+    if not DESCRIBE_MODEL_ID:
         return None
     try:
         out = bedrock.converse(
-            modelId=RERANK_MODEL_ID,
+            modelId=DESCRIBE_MODEL_ID,
             system=[{"text": CONTEXT_SYSTEM}],
             messages=[{"role": "user", "content": [
                 {"image": {"format": _img_format(image_bytes), "source": {"bytes": image_bytes}}},
@@ -260,9 +262,9 @@ def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
                       "powodu samej różnicy rozmiaru); typ/kształt wspierają dopasowanie."
                 )})
         imgs = 0
-        # Limit obrazów Sonnet ~20/żądanie (łącznie z obrazem zapytania). Budżet dzielimy na kandydatów,
-        # żeby przy większym recall NIE przekroczyć limitu (inaczej wyjątek → fallback bez oceny).
-        per_cand = max(1, min(4, 18 // max(1, len(cands))))
+        # Budżet obrazów do reranku (koszt Sonnet ~ liczba zdjęć). Obniżony (A): ~8 zdjęć łącznie zamiast ~16 —
+        # kształt/bryłę widać na 1-2 ujęciach, więc jakość ~bez zmian, a koszt ~2× mniejszy. Dzielimy na kandydatów.
+        per_cand = max(1, min(3, 8 // max(1, len(cands))))
         for i, c in enumerate(cands):
             attrs = json.dumps(c.get("attributes") or {}, ensure_ascii=False)[:400]
             params = json.dumps(c.get("params") or {}, ensure_ascii=False)[:400]

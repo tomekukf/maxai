@@ -230,6 +230,7 @@ export class MaxaiStack extends Stack {
         DB_SECRET_ARN: db.secret!.secretArn,
         EMBED_MODEL_ID: EMBED_MODEL_ID,
         RERANK_MODEL_ID: SONNET_MODEL_ID,
+        DESCRIBE_MODEL_ID: HAIKU_MODEL_ID, // opis wycinka + kontekst z rysunku na taniej Haiku (rerank zostaje Sonnet)
       },
       timeout: Duration.seconds(60),
       memorySize: 512,

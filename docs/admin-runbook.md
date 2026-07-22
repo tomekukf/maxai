@@ -124,7 +124,10 @@ Gdy chcesz zrobić wszystko z konsoli, bez GUI:
 
 ## Koszty
 
-- Największe pozycje: **Sonnet 4.5** (rerank/opis przy każdym `/search` — wysyła zdjęcia kandydatów) i **RDS 24/7**.
+- Największe pozycje: **Sonnet 4.5** (rerank przy każdym `/search` — wysyła zdjęcia kandydatów) i **RDS 24/7**.
+- **Zastosowane cięcia (A+D):** rerank wysyła ~8 zdjęć zamiast ~16 (`per_cand`, budżet 8); opis wycinka i kontekst z rysunku
+  liczone na **Haiku** (`DESCRIBE_MODEL_ID`), rerank zostaje na Sonnet. Efekt: ~50–60% mniej za wyszukiwanie, jakość ~bez zmian.
+  Dalszy krok (C, opcjonalnie): downscale zdjęć do ~512px przed rerankiem (Pillow) → jeszcze ~2–4× taniej.
 - **Uwaga o Free Tier:** okno 12 mies. liczy się od założenia KONTA (nie instancji), a konto jest wspólne z `liveorganizer`
   → RDS może już NIE być darmowy (spec `db.t3.micro` jest „eligible", ale okno bywa zamknięte / pula 750 h dzielona).
   `db.t3.micro` 24/7 ≈ ~$13/mies. + storage 20 GB ≈ ~$1.8. Publiczny IPv4 (linia „VPC") nie jest darmowy.
