@@ -388,6 +388,7 @@ def lambda_handler(event, _ctx):
 
     top_k = max(1, min(int(body.get("topK", 3)), 20))
     recall_k = max(top_k, int(body.get("recallK", 8)))  # kandydaci do rerankingu (budżet obrazów dzielony na nich)
+    fast = bool(body.get("fast"))  # tryb „szybki": sam cosinus (bez wizyjnego reranku Sonnet) — ~darmowy, do porównań/oszczędności
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
 
@@ -473,8 +474,13 @@ def lambda_handler(event, _ctx):
         except Exception:  # noqa: BLE001
             c["image_urls"] = [c["image_s3_url"]]
 
-    # Rerank Sonnet 4.5 na WSZYSTKICH zdjęciach + atrybutach + specyfikacji (kandydaci w tej samej kategorii).
-    order, scores, reasons = _rerank(image_bytes, cands, query_attrs, query_context)
+    # Tryb „szybki": kolejność wprost z cosinusa (retrieve już posortowany), BEZ wizyjnego reranku Sonnet.
+    if fast:
+        print("[mode] fast — ranking po cosinusie (bez rerank Sonnet)")
+        order, scores, reasons = list(range(len(cands))), {}, {}
+    else:
+        # Rerank Sonnet 4.5 na zdjęciach + atrybutach + specyfikacji (kandydaci w tej samej kategorii).
+        order, scores, reasons = _rerank(image_bytes, cands, query_attrs, query_context)
 
     results = []
     for idx in order[:top_k]:
@@ -510,7 +516,7 @@ def lambda_handler(event, _ctx):
         results.append(item)
     # queryAttributes: co system „zrozumiał" z wycinka (do panelu „dlaczego podobne").
     return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs,
-                       "queryContext": query_context})
+                       "queryContext": query_context, "mode": "fast" if fast else "quality"})
 
 
 def _resp(status, data):

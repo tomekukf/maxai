@@ -74,6 +74,7 @@ type SearchGroup = {
   queryCategory: string | null;
   queryAttrs: Record<string, unknown> | null;
   queryContext?: Record<string, unknown> | null; // odczytane z dołączonego rysunku/spec (F2a)
+  mode?: 'quality' | 'fast';
   results: SearchResult[];
   busy: boolean;
   loadingMore: boolean;
@@ -134,6 +135,7 @@ export default function SearchPage() {
   const [manualHint, setManualHint] = useState(''); // „czego szukasz?" dla ręcznego kadru
   const [contextB64, setContextB64] = useState<string | null>(null); // rysunek techniczny/spec (F2a)
   const [contextName, setContextName] = useState<string | null>(null);
+  const [fastMode, setFastMode] = useState(false); // tryb „szybki" (sam cosinus, bez Sonnet) — admin/testy
   // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
   const [admin] = useState(() => isAdmin(loadSession()));
   const [diag, setDiag] = useState(false);
@@ -339,9 +341,9 @@ export default function SearchPage() {
   async function runGroupSearch(gi: number, b64: string, k: number, hint?: string) {
     setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: true, error: null } : g)));
     try {
-      const res = await searchByImage(b64, k, hint, contextB64 ?? undefined);
+      const res = await searchByImage(b64, k, hint, contextB64 ?? undefined, fastMode);
       setGroups((gs) => gs.map((g, i) => (i === gi
-        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
+        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
     } catch (e) {
       setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: false, error: (e as Error).message } : g)));
@@ -353,7 +355,7 @@ export default function SearchPage() {
     if (!g || !g.b64) return;
     setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: true } : x)));
     try {
-      const res = await searchByImage(g.b64, g.results.length + 3, g.hint, contextB64 ?? undefined);
+      const res = await searchByImage(g.b64, g.results.length + 3, g.hint, contextB64 ?? undefined, fastMode);
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, results: res.results, loadingMore: false } : x)));
     } catch (e) {
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: false, error: (e as Error).message } : x)));
@@ -526,6 +528,12 @@ export default function SearchPage() {
                 </label>
                 {contextB64 && <button onClick={() => onPickContext(null)} className="text-xs text-red-600 hover:underline">usuń</button>}
               </span>
+              {admin && (
+                <label className="flex cursor-pointer items-center gap-1 text-xs text-slate-600" title="Szybki: ranking po samym cosinusie, bez wizyjnego reranku Sonnet (~darmowy, do porównań). Jakość: pełny rerank.">
+                  <input type="checkbox" checked={fastMode} onChange={(e) => setFastMode(e.target.checked)} className="h-3.5 w-3.5" />
+                  Tryb szybki (bez Sonneta)
+                </label>
+              )}
               {msg && <span className="text-sm text-red-700">{msg}</span>}
             </div>
           </>
@@ -580,6 +588,7 @@ function GroupSection({
           <div className="text-sm font-medium">{g.label}</div>
           <div className="text-xs text-slate-500">
             {g.busy ? 'Szukam…' : g.queryCategory ? `kategoria: ${g.queryCategory} · ${grouped.length} propozycji` : `${grouped.length} propozycji`}
+            {g.mode === 'fast' && <span className="ml-1 rounded bg-slate-200 px-1 text-[10px] text-slate-600">tryb szybki (cosinus)</span>}
           </div>
         </div>
       </div>

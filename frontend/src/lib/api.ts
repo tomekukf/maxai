@@ -186,6 +186,7 @@ export type SearchResponse = {
   queryCategory?: string | null;
   queryAttributes?: Record<string, unknown> | null; // co system „zrozumiał" z wycinka
   queryContext?: Record<string, unknown> | null; // co odczytano z dołączonego rysunku/spec (F2a)
+  mode?: 'quality' | 'fast'; // tryb użyty do rankingu
 };
 
 export async function searchByImage(
@@ -193,12 +194,13 @@ export async function searchByImage(
   topK = 3,
   hint?: string,
   contextImageBase64?: string, // opcjonalny rysunek techniczny/spec (F2a)
+  fast?: boolean, // tryb „szybki": sam cosinus, bez rerank Sonnet (~darmowy)
 ): Promise<SearchResponse> {
   const r = await fetch(`${API_URL}/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // hint = etykieta z detekcji (np. „stolik kawowy") — naprowadza opis zapytania na właściwy obiekt.
-    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}), ...(contextImageBase64 ? { contextImageBase64 } : {}) }),
+    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}), ...(contextImageBase64 ? { contextImageBase64 } : {}), ...(fast ? { fast: true } : {}) }),
   });
   if (!r.ok) throw new Error(`search: ${r.status}`);
   const data = await r.json();
@@ -207,6 +209,7 @@ export async function searchByImage(
     queryCategory: data.queryCategory ?? null,
     queryAttributes: data.queryAttributes ?? null,
     queryContext: data.queryContext ?? null,
+    mode: data.mode ?? undefined,
   };
 }
 
