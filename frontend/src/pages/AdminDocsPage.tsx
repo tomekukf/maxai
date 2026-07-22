@@ -1,5 +1,5 @@
 import runbook from '../../../docs/admin-runbook.md?raw';
-import { MarkdownLite } from '../lib/markdown';
+import { MarkdownSections } from '../lib/markdown';
 
 export default function AdminDocsPage() {
   return (
@@ -8,7 +8,7 @@ export default function AdminDocsPage() {
         <p className="mb-3 text-xs text-slate-400">
           Źródło: <code>docs/admin-runbook.md</code> (edytuj w repo).
         </p>
-        <MarkdownLite source={runbook} />
+        <MarkdownSections source={runbook} />
       </main>
     </div>
   );

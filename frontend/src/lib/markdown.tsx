@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 // Lekki renderer markdown (bez zależności): nagłówki, bloki kodu, listy, akapity,
 // inline `kod` i **pogrubienie**. Wystarcza do runbooka admina.
@@ -75,4 +75,77 @@ export function MarkdownLite({ source }: { source: string }) {
   }
   flush();
   return <div className="max-w-none">{blocks}</div>;
+}
+
+// Podział markdowna na sekcje po nagłówkach `## ` (ignoruje `#` w blokach kodu).
+type Section = { title: string; body: string };
+function splitSections(source: string): { intro: string; sections: Section[] } {
+  const lines = source.split('\n');
+  const intro: string[] = [];
+  const sections: Section[] = [];
+  let cur: Section | null = null;
+  let inCode = false;
+  for (const line of lines) {
+    if (line.startsWith('```')) inCode = !inCode;
+    if (!inCode && /^##\s/.test(line)) {
+      cur = { title: line.replace(/^##\s/, '').trim(), body: '' };
+      sections.push(cur);
+      continue;
+    }
+    if (cur) cur.body += line + '\n';
+    else intro.push(line);
+  }
+  return { intro: intro.join('\n'), sections };
+}
+
+// Dokumentacja w zwijanych panelach: nagłówek `##` = panel, treść pod spodem.
+// Domyślnie wszystko zwinięte — długi runbook przestaje być ścianą tekstu.
+export function MarkdownSections({ source }: { source: string }) {
+  const { intro, sections } = useMemo(() => splitSections(source), [source]);
+  const [open, setOpen] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+
+  return (
+    <div className="space-y-3">
+      {intro.trim() && <MarkdownLite source={intro} />}
+
+      {sections.length > 1 && (
+        <div className="flex items-center gap-3 text-xs">
+          <button onClick={() => setOpen(new Set(sections.map((_, i) => i)))} className="text-blue-700 hover:underline">
+            Rozwiń wszystko
+          </button>
+          <button onClick={() => setOpen(new Set())} className="text-blue-700 hover:underline">
+            Zwiń wszystko
+          </button>
+          <span className="text-slate-400">{sections.length} sekcji</span>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {sections.map((s, i) => (
+          <div key={i} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <button
+              onClick={() => toggle(i)}
+              aria-expanded={open.has(i)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50"
+            >
+              <span>{s.title}</span>
+              <span className="shrink-0 text-slate-400">{open.has(i) ? '−' : '+'}</span>
+            </button>
+            {open.has(i) && (
+              <div className="border-t border-slate-100 px-3 pb-3 pt-1">
+                <MarkdownLite source={s.body} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

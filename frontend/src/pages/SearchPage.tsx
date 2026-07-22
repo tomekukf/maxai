@@ -135,7 +135,7 @@ function contextSummary(ctx: Record<string, unknown> | null | undefined): string
   return bits.length ? bits.join(' · ') : null;
 }
 
-export default function SearchPage() {
+export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {}) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [pageNum, setPageNum] = useState(1);
@@ -157,8 +157,9 @@ export default function SearchPage() {
   const [contextB64, setContextB64] = useState<string | null>(null); // rysunek techniczny/spec (F2a)
   const [contextName, setContextName] = useState<string | null>(null);
   const [fastMode, setFastMode] = useState(false); // tryb „szybki" (sam cosinus, bez Sonnet) — admin/testy
-  // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
-  const [admin] = useState(() => isAdmin(loadSession()));
+  // Narzędzia admina (tryb szybki, diagnostyka) — rola z propa z App, fallback na sesję z localStorage.
+  const [adminFromSession] = useState(() => isAdmin(loadSession()));
+  const admin = adminProp ?? adminFromSession;
   const [diag, setDiag] = useState(false);
 
   const [msg, setMsg] = useState<string | null>(null);
@@ -418,6 +419,23 @@ export default function SearchPage() {
           </p>
         </div>
 
+        {/* Pasek narzędzi admina — widoczny od razu (nie chowa się za uploadem). */}
+        {admin && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs">
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">admin</span>
+            <label
+              className="flex cursor-pointer items-center gap-1.5 text-slate-700"
+              title="Szybki: ranking po samym kosinusie Titana, bez wizyjnego reranku Sonnet (~darmowy, do porównań). Jakość: pełny rerank."
+            >
+              <input type="checkbox" checked={fastMode} onChange={(e) => setFastMode(e.target.checked)} className="h-4 w-4 accent-brand" />
+              ⚡ Tryb szybki (bez rerankingu Sonnet)
+            </label>
+            <span className="text-slate-400">
+              {fastMode ? 'ranking = kosinus Titana, 0 kosztu Bedrock (poza embeddingiem)' : 'ranking = pełny rerank Sonnet (domyślny, płatny)'}
+            </span>
+          </div>
+        )}
+
         <input
           type="file"
           accept="application/pdf,image/*"
@@ -624,11 +642,8 @@ export default function SearchPage() {
                 {anyBusy ? 'Szukam…' : `Szukaj zaznaczonych${selected.size ? ` (${selected.size})` : ''}`}
               </button>
 
-              {admin && (
-                <label className="mt-2 flex cursor-pointer items-center gap-1 text-xs text-slate-600" title="Szybki: ranking po samym cosinusie, bez wizyjnego reranku Sonnet (~darmowy, do porównań). Jakość: pełny rerank.">
-                  <input type="checkbox" checked={fastMode} onChange={(e) => setFastMode(e.target.checked)} className="h-3.5 w-3.5" />
-                  Tryb szybki (bez Sonneta)
-                </label>
+              {admin && fastMode && (
+                <div className="mt-2 text-center text-[11px] text-slate-500">⚡ tryb szybki włączony (bez Sonneta)</div>
               )}
             </aside>
           </div>

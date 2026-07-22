@@ -89,11 +89,11 @@ export default function App() {
         </div>
       </nav>
 
-      {area === 'user' && userView === 'search' && <SearchPage />}
+      {area === 'user' && userView === 'search' && <SearchPage admin={admin} />}
       {area === 'user' && userView === 'catalog' && <CatalogPage admin={false} />}
       {area === 'user' && userView === 'shortlist' && <ShortlistPage />}
 
-      {area === 'admin' && admin && adminView === 'search' && <SearchPage />}
+      {area === 'admin' && admin && adminView === 'search' && <SearchPage admin />}
       {area === 'admin' && admin && adminView === 'catalog' && <CatalogPage admin />}
       {area === 'admin' && admin && adminView === 'shortlist' && <ShortlistPage />}
       {area === 'admin' && admin && adminView === 'import' && <ImportPage />}
