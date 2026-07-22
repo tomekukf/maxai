@@ -760,13 +760,15 @@ maxfliz (web, cała oferta, 17 źródeł) = 3744; MAXLIVING (catalog, 6 tematycz
   `hint` (etykieta detekcji / pole „czego szukasz?"). `_describe_query` naprowadza opis na wskazany obiekt („tło ignoruj").
   **Sygnał miękki** — finalną kategorię ustala model (odporność na błędną detekcję).
 
-**Krok 12.3 — PDF podsumowania wyszukiwania** — 🟡 CZĘŚCIOWO (widok do druku zrobiony; tabelka z selekcją do zrobienia)
-- ✅ „Drukuj / zapisz PDF": samodzielny widok do druku (nowe okno, zdjęcia jako `<img>`, auto-print; sekcja per produkt,
-  %, kod/SKU, odniesienie do katalogu). 0 kosztów, bez CORS.
-- 📐 **DO ZROBIENIA (na później, gdy priorytet): PDF jako TABELA z ręczną selekcją.** Z zaproponowanych produktów pracownik
-  **zaznacza (checkbox)** te, które chce → trafiają do **tabelki** w PDF. Minimalny zestaw kolumn (miniatura/nazwa/kod-SKU/
-  producent/odniesienie) + **link referencyjny** (do produktu na maxfliz / strony katalogu). Prawdopodobnie spięte ze
-  „Schowkiem" (już zbiera kandydatów) — selekcja = źródło tabeli. Frontend-only (druk/HTML). Bez cen.
+**Krok 12.3 — PDF podsumowania wyszukiwania** — ✅ ZROBIONE (wdrożone)
+- ✅ „Drukuj / zapisz PDF" (SearchPage): widok do druku wyników (nowe okno, `<img>`, auto-print; sekcja per produkt, %, kod/SKU, katalog).
+- ✅ **PDF-tabelka ze Schowka z selekcją:** checkboxy w Schowku → „PDF — tabela" (kolumny: miniatura/nazwa/kod-SKU/producent/
+  odniesienie z linkiem ref). `ShortItem` +`ref`/`sku` uzupełniane przy dodaniu do schowka. Frontend-only, 0 kosztów, bez CORS.
+
+**Krok 12.6 — Fix jakości danych (mylące zdjęcia główne)** — ✅ ZROBIONE (wdrożone)
+- Znalezione podczas Fazy 8.5: część produktów (stolik/stół „FAKTORIA/LARGO/MONACO", łóżko „BAZY HOTELOWE" itp.) ma jako zdjęcie
+  główne inny mebel/rysunek. Fix: admin **„Ustaw jako główne"** w `ProductModal` (`imageOrder[]` → `sort_order` w `_update`;
+  `_detail` zwraca `id` zdjęcia). Naprawia produkty, gdzie właściwe zdjęcie istnieje, ale było w złej kolejności.
 
 **Krok 12.5 — Hardening reranku (koniec `rerank=null`)** — ✅ ZROBIONE (wdrożone)
 - Przyczyna intermittentnego `rerank=null` (fallback na goły kosinus → np. okrągła vs kwadratowa umywalka): sędzia
@@ -774,9 +776,12 @@ maxfliz (web, cała oferta, 17 źródeł) = 3744; MAXLIVING (catalog, 6 tematycz
   **odzysk częściowego JSON** (`_salvage_rerank_items` regexem), log `stopReason`.
 - ✅ Weryfikacja: 4/4 z pełnymi ocenami, `stopReason=end_turn` (bez ucinania).
 
-**Krok 12.4 — F2: wzbogacenie kontekstu dodatkowym źródłem (rysunek techniczny / wymiary)** — 📐 ZAPLANOWANE
-- F2a (typ/kształt z rysunku — bez przepisania danych) → F2b (wymiary — wymaga backfillu wymiarów do `params`, lokalnie/0 Bedrock).
-  Wymiary jako sygnał **miękki**, nigdy twardy filtr. Anti-halucynacja: ekstrahuj tylko czytelne, transparentnie pokaż odczyt. (Szczegóły w rozmowie/analizie.)
+**Krok 12.4 — F2: wzbogacenie kontekstu dodatkowym źródłem (rysunek techniczny / wymiary)** — ✅ ZROBIONE (wdrożone)
+- ✅ **F2a:** `/search` przyjmuje `contextImageBase64` (rysunek/spec) → `_extract_context` (Sonnet, prompt anti-halucynacja:
+  tylko czytelne, niepewne→null) → wzmacnia `hint` (typ/kształt) + **miękki** sygnał do reranku; zwraca `queryContext`.
+  `SearchPage`: „Dołącz rysunek/spec", odczyt pokazany do weryfikacji. Zweryfikowane: „BAZY HOTELOWE" → typ/kształt OK, wymiary null (bez zgadywania).
+- ✅ **F2b:** `scripts/backfill-dims.mjs` (re-scrape maxfliz `body_html` → `params.wymiary_cm`, heurystyki PL, 0 Bedrock).
+  **1449 produktów** ma wymiary (gł. płytki/sztukateria/oświetlenie/sofa/łazienka); rerank porównuje **miękko** (nigdy twardy filtr).
 
 ---
 
