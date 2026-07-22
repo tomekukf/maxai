@@ -370,7 +370,7 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
           <div className="flex items-center gap-3">
             {d && (
               <button
-                onClick={() => toggleShortlist({ id: d.id, name: d.name, code: d.optimaId ?? d.manufacturerCode ?? (d.params?.sku as string | undefined) ?? null, source: d.source, manufacturer: d.manufacturer, imageUrl: d.images[0]?.imageUrl })}
+                onClick={() => toggleShortlist({ id: d.id, name: d.name, code: d.optimaId ?? d.manufacturerCode ?? (d.params?.sku as string | undefined) ?? null, sku: (d.params?.sku as string | undefined) ?? null, source: d.source, manufacturer: d.manufacturer, imageUrl: d.images[0]?.imageUrl, ref: (d.params?.product_url as string | undefined) ?? d.catalog?.pageImageUrl ?? d.catalog?.pdfUrl ?? null })}
                 className={inSL ? 'text-xs font-medium text-accent-dark' : 'text-xs text-slate-500 hover:text-brand'}
               >
                 {inSL ? '★ W schowku' : '☆ Do schowka'}

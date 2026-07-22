@@ -6,9 +6,11 @@ export type ShortItem = {
   id: string;
   name: string;
   code?: string | null; // ID Optima / SKU / kod
+  sku?: string | null; // SKU (jeśli osobno od code)
   source?: string;
   manufacturer?: string;
   imageUrl?: string; // presigned (może wygasnąć po ~1h — to narzędzie sesyjne)
+  ref?: string | null; // link referencyjny: produkt na maxfliz / strona katalogu producenta
 };
 
 const KEY = 'maxai_shortlist';

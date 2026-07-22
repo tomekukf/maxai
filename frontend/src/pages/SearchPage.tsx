@@ -818,7 +818,7 @@ function ResultCard({
 
       <div className="mt-2 flex items-center gap-3">
         <button
-          onClick={() => toggleShortlist({ id: sid, name: r.name, code, source: r.source, manufacturer: r.manufacturer, imageUrl: r.imageUrl })}
+          onClick={() => toggleShortlist({ id: sid, name: r.name, code, sku: (r.params?.sku as string | undefined) ?? null, source: r.source, manufacturer: r.manufacturer, imageUrl: r.imageUrl, ref: (r.params?.product_url as string | undefined) ?? r.catalogPageImageUrl ?? r.catalogUrl ?? null })}
           className={inShortlist ? 'text-xs font-medium text-accent-dark' : 'text-xs text-slate-500 hover:text-brand'}
         >
           {inShortlist ? '★ W schowku' : '☆ Do schowka'}
