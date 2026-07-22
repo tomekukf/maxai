@@ -348,11 +348,11 @@ def _detail(pid):
     (optima_id, name, params, source, category, subtype, manufacturer, mfr_code,
      group_id, catalog_page, catalog_name, catalog_pdf) = rows[0]
     imgs = _db().run(
-        "SELECT image_s3_url, attributes, sort_order FROM product_images "
+        "SELECT id, image_s3_url, attributes, sort_order FROM product_images "
         "WHERE product_id = CAST(:id AS uuid) ORDER BY sort_order, created_at",
         id=pid,
     )
-    images = [{"imageUrl": _presign_get(u), "attributes": a, "sortOrder": so} for (u, a, so) in imgs]
+    images = [{"id": str(iid), "imageUrl": _presign_get(u), "attributes": a, "sortOrder": so} for (iid, u, a, so) in imgs]
     product = {
         "id": pid, "optimaId": optima_id, "name": name, "params": params, "source": source,
         "category": category, "subtype": subtype, "manufacturer": manufacturer,
@@ -377,6 +377,8 @@ _EDITABLE = {
 def _update(pid, body):
     if not pid:
         return _resp(400, {"error": "Brak id"})
+    conn = _db()
+    changed = False
     sets, kw = [], {"id": pid}
     for key, col in _EDITABLE.items():
         if key in body:
@@ -385,19 +387,31 @@ def _update(pid, body):
     if "params" in body:
         sets.append("params = CAST(:params AS jsonb)")
         kw["params"] = json.dumps(body["params"], ensure_ascii=False)
-    if not sets:
+    if sets:
+        try:
+            rows = conn.run(
+                f"UPDATE products SET {', '.join(sets)} WHERE id = CAST(:id AS uuid) RETURNING id", **kw
+            )
+        except Exception as e:  # noqa: BLE001
+            if _is_dup(str(e)):
+                return _resp(409, {"error": "Kod produktu już istnieje (manufacturer+code)"})
+            raise
+        if not rows:
+            return _resp(404, {"error": "Nie znaleziono produktu"})
+        changed = True
+    # Kolejność zdjęć (fix jakości danych: ustaw właściwe zdjęcie jako główne).
+    order = body.get("imageOrder")
+    if isinstance(order, list) and order:
+        for i, iid in enumerate(order):
+            conn.run(
+                "UPDATE product_images SET sort_order = :so "
+                "WHERE id = CAST(:iid AS uuid) AND product_id = CAST(:pid AS uuid)",
+                so=i, iid=str(iid), pid=pid,
+            )
+        changed = True
+    if not changed:
         return _resp(400, {"error": "Brak pól do aktualizacji"})
-    try:
-        rows = _db().run(
-            f"UPDATE products SET {', '.join(sets)} WHERE id = CAST(:id AS uuid) RETURNING id", **kw
-        )
-    except Exception as e:  # noqa: BLE001
-        if _is_dup(str(e)):
-            return _resp(409, {"error": "Kod produktu już istnieje (manufacturer+code)"})
-        raise
-    if not rows:
-        return _resp(404, {"error": "Nie znaleziono produktu"})
-    return _resp(200, {"id": str(rows[0][0]), "updated": True})
+    return _resp(200, {"id": pid, "updated": True})
 
 
 def _delete_by_id(pid):

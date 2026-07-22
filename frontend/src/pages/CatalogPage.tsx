@@ -342,6 +342,23 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
       .catch((e) => setErr((e as Error).message));
   }, [id]);
 
+  // Fix jakości danych: ustaw wskazane zdjęcie jako główne (przenosi na początek → sort_order 0).
+  async function setPrimary(imgId: string) {
+    if (!d) return;
+    const ids = d.images.map((im) => im.id).filter(Boolean) as string[];
+    const order = [imgId, ...ids.filter((x) => x !== imgId)];
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateProduct(id, { imageOrder: order });
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save() {
     setSaving(true);
     setErr(null);
@@ -387,14 +404,26 @@ function ProductModal({ id, admin, onClose, onSaved }: { id: string; admin: bool
           <div className="space-y-4">
             <div className="flex gap-2 overflow-x-auto">
               {d.images.map((im, i) => (
-                <img
-                  key={i}
-                  src={im.imageUrl}
-                  alt=""
-                  onClick={() => setZoom(im.imageUrl)}
-                  title="Kliknij, aby powiększyć"
-                  className="h-32 w-32 flex-none cursor-zoom-in rounded border bg-slate-50 object-contain hover:ring-2 hover:ring-slate-400"
-                />
+                <div key={im.id ?? i} className="relative flex-none">
+                  <img
+                    src={im.imageUrl}
+                    alt=""
+                    onClick={() => setZoom(im.imageUrl)}
+                    title="Kliknij, aby powiększyć"
+                    className={'h-32 w-32 cursor-zoom-in rounded border bg-slate-50 object-contain hover:ring-2 hover:ring-slate-400 ' + (i === 0 ? 'ring-2 ring-brand' : '')}
+                  />
+                  {i === 0 && <span className="absolute left-1 top-1 rounded bg-brand px-1 text-[10px] text-white">główne</span>}
+                  {admin && i > 0 && im.id && (
+                    <button
+                      onClick={() => setPrimary(im.id!)}
+                      disabled={saving}
+                      title="Ustaw jako zdjęcie główne"
+                      className="absolute bottom-1 left-1 right-1 rounded bg-white/90 px-1 py-0.5 text-[10px] font-medium text-brand shadow hover:bg-white disabled:opacity-50"
+                    >
+                      Ustaw jako główne
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
 

@@ -218,6 +218,7 @@ export type Product = {
 };
 
 export type ProductImage = {
+  id?: string;
   imageUrl: string;
   attributes?: Record<string, unknown> | null;
   sortOrder: number;
@@ -249,6 +250,7 @@ export type ProductPatch = Partial<{
   groupId: string;
   sourceUrl: string;
   params: Record<string, unknown>;
+  imageOrder: string[]; // nowa kolejność zdjęć (id) — pierwsze = główne
 }>;
 
 export type ProductQuery = {
