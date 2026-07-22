@@ -783,6 +783,25 @@ maxfliz (web, cała oferta, 17 źródeł) = 3744; MAXLIVING (catalog, 6 tematycz
 - ✅ **F2b:** `scripts/backfill-dims.mjs` (re-scrape maxfliz `body_html` → `params.wymiary_cm`, heurystyki PL, 0 Bedrock).
   **1449 produktów** ma wymiary (gł. płytki/sztukateria/oświetlenie/sofa/łazienka); rerank porównuje **miękko** (nigdy twardy filtr).
 
+**Krok 12.7 — Tryb szybki (bez rerankingu Sonnet)** — ✅ ZROBIONE (wdrożone)
+- `/search` przyjmuje `fast: true` → kolejność **wprost z kosinusa Titana**, `_rerank` w ogóle nie wywoływany
+  (zero kosztu Sonnet); odpowiedź zawiera `"mode": "fast" | "quality"`. W trybie fast `rerankScore = null`,
+  a `similarity` = kosinus Titana.
+- Front: `searchByImage(..., fast?)`; przełącznik **„Tryb szybki (bez Sonneta)" widoczny tylko dla admina**
+  (grupa `admin` w Cognito), działa też przy „wczytaj kolejne"; przy wynikach plakietka „tryb szybki (cosinus)".
+- Zastosowanie: porównania jakości retrieve vs rerank i tanie testy UI bez palenia budżetu Bedrock.
+
+**Krok 12.8 — Panel podpowiedzi obok obrazu (redesign `SearchPage`)** — ✅ ZROBIONE (wdrożone)
+- Układ dwukolumnowy (`max-w-6xl`): **po lewej** wizualizacja z ruchomym kadrem i kropkowaną nakładką detekcji,
+  **po prawej** sticky panel „Wykryte produkty".
+- Panel = lista wykrytych obiektów, każdy jako **checkbox „wyślij do analizy"** + **miniatura wycinka** + etykieta
+  z numerem + „popraw kadr" (wczytuje ramkę jako ruchomy kadr). Miniatury liczone lokalnie z canvas (0 kosztów,
+  bez sieci) i **odświeżane po poprawieniu kadru** — widać dokładnie to, co pójdzie do `/search`.
+- Analiza startuje **automatycznie** po wgraniu obrazu/strony PDF; przycisk `↻ analizuj` do ponowienia, szkielet
+  ładowania, komunikat gdy nic nie wykryto. W panelu: „Zaznacz/Odznacz wszystkie", licznik pominiętych spoza
+  asortymentu, „Szukaj zaznaczonych (N)" i przełącznik trybu szybkiego (admin).
+- Ręczny kadr („Szukaj tego kadru" + „czego szukasz?") i załącznik rysunku/spec (F2a) — pod obrazem.
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)

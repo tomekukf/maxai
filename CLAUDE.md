@@ -124,7 +124,12 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   anti-halucynacja; odczyt pokazany w UI) wzmacnia hint + miękki sygnał do reranku; **F2b** wymiary: `scripts/backfill-dims.mjs`
   (re-scrape maxfliz body_html → `params.wymiary_cm`, 0 Bedrock) — **1449 produktów** ma wymiary; rerank porównuje miękko.
   ✅ 12.5 hardening reranku. ✅ **Fix jakości danych:** admin „Ustaw jako główne" (reorder zdjęć, `imageOrder`→`sort_order`) —
-  naprawia produkty z mylącym zdjęciem głównym. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 12.
+  naprawia produkty z mylącym zdjęciem głównym. ✅ **12.7 tryb szybki:** `/search` przyjmuje `fast:true` → ranking wprost
+  z kosinusa Titana, bez `_rerank` (0 kosztu Sonnet), odpowiedź z `mode: fast|quality`; przełącznik „Tryb szybki
+  (bez Sonneta)" **tylko dla admina**, plakietka przy wynikach. ✅ **12.8 redesign `SearchPage`:** układ dwukolumnowy
+  (obraz + ruchomy kadr po lewej, sticky panel „Wykryte produkty" po prawej) — każda podpowiedź to **checkbox
+  „wyślij do analizy" + miniatura wycinka** (liczona lokalnie z canvas, odświeżana po poprawieniu kadru) + „popraw kadr";
+  analiza startuje automatycznie po wgraniu, `↻ analizuj` do ponowienia. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 12.
 - ▶️ Następne (do rozważenia): dokończenie importu maxfliz (płytki/dywany/tapety/podłogi/drzwi/sztukateria/lustro — za zgodą, koszt Titan);
   Faza 8.5 (generowanie i zapis opisów wizualnych `attributes` lokalnie); ew. dedykowany endpoint `/stats` (dziś statystyki liczone
   przez pełny skan `slim` z frontu).
