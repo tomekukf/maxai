@@ -73,6 +73,7 @@ type SearchGroup = {
   queryImg: string;
   queryCategory: string | null;
   queryAttrs: Record<string, unknown> | null;
+  queryContext?: Record<string, unknown> | null; // odczytane z dołączonego rysunku/spec (F2a)
   results: SearchResult[];
   busy: boolean;
   loadingMore: boolean;
@@ -81,6 +82,37 @@ type SearchGroup = {
 
 const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 const numBadge = (n: number) => CIRCLED[n - 1] ?? `(${n})`;
+
+// Plik (rysunek/spec) → base64 JPEG (białe tło pod ew. przezroczystość rysunków).
+async function fileToJpegB64(file: File, maxSize = 1400): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, maxSize / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('canvas');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bmp, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.9).split(',')[1];
+}
+
+// Czytelny odczyt kontekstu z rysunku (do pokazania użytkownikowi — weryfikacja/anti-halucynacja).
+function contextSummary(ctx: Record<string, unknown> | null | undefined): string | null {
+  if (!ctx) return null;
+  const bits: string[] = [];
+  const add = (label: string, v: unknown) => { if (v != null && v !== '' && !(Array.isArray(v) && !v.length)) bits.push(`${label}: ${Array.isArray(v) ? v.join(', ') : v}`); };
+  add('typ', ctx.typ); add('kształt', ctx.ksztalt); add('materiał', ctx.material);
+  const dim = ctx.wymiary_cm as Record<string, unknown> | undefined;
+  if (dim && typeof dim === 'object') {
+    const d = ['szerokosc', 'glebokosc', 'wysokosc', 'srednica', 'dlugosc'].map((k) => dim[k]).filter((x) => x != null);
+    if (d.length) add('wymiary(cm)', Object.entries(dim).filter(([, v]) => v != null).map(([k, v]) => `${k}:${v}`).join(' '));
+  }
+  add('cechy', ctx.cechy);
+  return bits.length ? bits.join(' · ') : null;
+}
 
 export default function SearchPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -100,6 +132,8 @@ export default function SearchPage() {
   const [cropByItem, setCropByItem] = useState<Map<number, PixelCrop>>(new Map()); // zapamiętany (przesunięty) kadr per produkt
   const [groups, setGroups] = useState<SearchGroup[]>([]); // wyniki: 1 grupa = 1 produkt
   const [manualHint, setManualHint] = useState(''); // „czego szukasz?" dla ręcznego kadru
+  const [contextB64, setContextB64] = useState<string | null>(null); // rysunek techniczny/spec (F2a)
+  const [contextName, setContextName] = useState<string | null>(null);
   // Tryb diagnostyczny — tylko dla zalogowanego admina (podgląd flow zapytania).
   const [admin] = useState(() => isAdmin(loadSession()));
   const [diag, setDiag] = useState(false);
@@ -231,6 +265,17 @@ export default function SearchPage() {
     clearCrop();
   }
 
+  // F2a: dołączenie/zdjęcie rysunku technicznego/spec (dodatkowy kontekst dla wyszukiwania).
+  async function onPickContext(f: File | null) {
+    if (!f) { setContextB64(null); setContextName(null); return; }
+    try {
+      setContextB64(await fileToJpegB64(f));
+      setContextName(f.name);
+    } catch {
+      setMsg('Nie mogę odczytać rysunku (obsługiwane: obraz JPG/PNG).');
+    }
+  }
+
   // Wycinek base64 z boxa znormalizowanego (0-1) — w rozdzielczości oryginału.
   function cropBox(image: HTMLImageElement, b: { x: number; y: number; w: number; h: number }): string | null {
     return cropToBase64(image, b.x * image.naturalWidth, b.y * image.naturalHeight, b.w * image.naturalWidth, b.h * image.naturalHeight);
@@ -294,9 +339,9 @@ export default function SearchPage() {
   async function runGroupSearch(gi: number, b64: string, k: number, hint?: string) {
     setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: true, error: null } : g)));
     try {
-      const res = await searchByImage(b64, k, hint);
+      const res = await searchByImage(b64, k, hint, contextB64 ?? undefined);
       setGroups((gs) => gs.map((g, i) => (i === gi
-        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
+        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
     } catch (e) {
       setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: false, error: (e as Error).message } : g)));
@@ -308,7 +353,7 @@ export default function SearchPage() {
     if (!g || !g.b64) return;
     setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: true } : x)));
     try {
-      const res = await searchByImage(g.b64, g.results.length + 3, g.hint);
+      const res = await searchByImage(g.b64, g.results.length + 3, g.hint, contextB64 ?? undefined);
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, results: res.results, loadingMore: false } : x)));
     } catch (e) {
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: false, error: (e as Error).message } : x)));
@@ -474,6 +519,13 @@ export default function SearchPage() {
                   className="w-52 rounded border border-slate-300 px-2 py-1 text-xs"
                 />
               </span>
+              <span className="flex items-center gap-1">
+                <label className="flex cursor-pointer items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" title="Dołącz rysunek techniczny / kartę katalogową — doprecyzuje typ/kształt/wymiary (opcjonalnie)">
+                  📎 <input type="file" accept="image/*" onChange={(e) => onPickContext(e.target.files?.[0] ?? null)} className="hidden" />
+                  {contextName ? `rysunek: ${contextName.slice(0, 18)}` : 'Dołącz rysunek/spec'}
+                </label>
+                {contextB64 && <button onClick={() => onPickContext(null)} className="text-xs text-red-600 hover:underline">usuń</button>}
+              </span>
               {msg && <span className="text-sm text-red-700">{msg}</span>}
             </div>
           </>
@@ -532,6 +584,12 @@ function GroupSection({
         </div>
       </div>
 
+      {contextSummary(g.queryContext) && (
+        <div className="rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-slate-600">
+          📎 Z rysunku/spec odczytano: <span className="text-slate-800">{contextSummary(g.queryContext)}</span>
+          <span className="ml-1 text-slate-400">(sygnał pomocniczy; wymiary orientacyjnie)</span>
+        </div>
+      )}
       {g.error && <div className="text-sm text-red-700">{g.error}</div>}
       {admin && diag && !g.busy && g.results.length > 0 && (
         <DiagPanel queryImg={g.queryImg || null} category={g.queryCategory} attrs={g.queryAttrs} results={g.results} />

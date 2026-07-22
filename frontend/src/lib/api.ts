@@ -185,14 +185,20 @@ export type SearchResponse = {
   results: SearchResult[];
   queryCategory?: string | null;
   queryAttributes?: Record<string, unknown> | null; // co system „zrozumiał" z wycinka
+  queryContext?: Record<string, unknown> | null; // co odczytano z dołączonego rysunku/spec (F2a)
 };
 
-export async function searchByImage(imageBase64: string, topK = 3, hint?: string): Promise<SearchResponse> {
+export async function searchByImage(
+  imageBase64: string,
+  topK = 3,
+  hint?: string,
+  contextImageBase64?: string, // opcjonalny rysunek techniczny/spec (F2a)
+): Promise<SearchResponse> {
   const r = await fetch(`${API_URL}/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // hint = etykieta z detekcji (np. „stolik kawowy") — naprowadza opis zapytania na właściwy obiekt.
-    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}) }),
+    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}), ...(contextImageBase64 ? { contextImageBase64 } : {}) }),
   });
   if (!r.ok) throw new Error(`search: ${r.status}`);
   const data = await r.json();
@@ -200,6 +206,7 @@ export async function searchByImage(imageBase64: string, topK = 3, hint?: string
     results: (data.results ?? []) as SearchResult[],
     queryCategory: data.queryCategory ?? null,
     queryAttributes: data.queryAttributes ?? null,
+    queryContext: data.queryContext ?? null,
   };
 }
 

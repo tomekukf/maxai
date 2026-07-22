@@ -200,9 +200,45 @@ def _describe_query(image_bytes: bytes, hint: str = None):
         return None
 
 
-def _rerank(query_bytes, cands, query_attrs=None):
+CONTEXT_SYSTEM = (
+    "Analizujesz DODATKOWE źródło dołączone do zapytania o produkt wnętrzarski: rysunek techniczny, "
+    "kartę katalogową, spec lub zdjęcie detalu. Twoim zadaniem jest wyłuskać PEWNE informacje o produkcie. "
+    "ZASADA NADRZĘDNA: podawaj tylko to, co WYRAŹNIE widać/czytasz. Czego nie widać jednoznacznie → null "
+    "(dla list → []). NIE ZGADUJ, nie interpoluj, nie wymyślaj marki ani wymiarów. Wymiary podaj TYLKO jeśli "
+    "są wypisane liczbami (z jednostką) lub jednoznacznie zwymiarowane na rysunku. "
+    'Zwróć WYŁĄCZNIE JSON: {"typ":..,"ksztalt":..,"material":..,"cechy":[..],'
+    '"wymiary_cm":{"szerokosc":..,"glebokosc":..,"wysokosc":..,"srednica":..,"dlugosc":..},'
+    '"czytelnosc":"dobra|slaba"}. Bez markdown, bez komentarzy.'
+)
+
+
+def _extract_context(image_bytes: bytes):
+    """Wyciąga PEWNE cechy z dodatkowego źródła (rysunek/spec). Zwraca dict albo None.
+    Anti-halucynacja: model raportuje tylko czytelne pola; niepewne → null."""
+    if not RERANK_MODEL_ID:
+        return None
+    try:
+        out = bedrock.converse(
+            modelId=RERANK_MODEL_ID,
+            system=[{"text": CONTEXT_SYSTEM}],
+            messages=[{"role": "user", "content": [
+                {"image": {"format": _img_format(image_bytes), "source": {"bytes": image_bytes}}},
+                {"text": "Wyłuskaj PEWNE informacje o produkcie z tego źródła (JSON). Niepewne → null."},
+            ]}],
+            inferenceConfig={"maxTokens": 500, "temperature": 0},
+        )
+        data = _parse_json(out["output"]["message"]["content"][0]["text"])
+        print(f"[context] z rysunku: {json.dumps(data, ensure_ascii=False)[:300]}")
+        return data if isinstance(data, dict) else None
+    except Exception as e:  # noqa: BLE001
+        print(f"[context] BLAD: {e}")
+        return None
+
+
+def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
     """Sonnet 4.5 sędzia: rankuje kandydatów na zdjęciach, odrzuca niepasujących.
-    Zwraca listę indeksów (best→worst) pasujących kandydatów."""
+    Zwraca listę indeksów (best→worst) pasujących kandydatów.
+    query_context = pewne cechy z dołączonego rysunku/spec (typ/kształt/wymiary) — sygnał MIĘKKI."""
     if not RERANK_MODEL_ID or len(cands) <= 1:
         print(f"[rerank] pomijam (model={RERANK_MODEL_ID}, cands={len(cands)})")
         return list(range(len(cands))), {}, {}
@@ -213,6 +249,16 @@ def _rerank(query_bytes, cands, query_attrs=None):
             {"image": {"format": _img_format(query_bytes), "source": {"bytes": query_bytes}}},
             {"text": f"Atrybuty ZAPYTANIA (opis wizualny): {q_attrs}"},
         ]
+        if isinstance(query_context, dict):
+            ctx_bits = {k: query_context.get(k) for k in ("typ", "ksztalt", "material", "cechy", "wymiary_cm")
+                        if query_context.get(k)}
+            if ctx_bits:
+                content.append({"text": (
+                    "DODATKOWY KONTEKST ZAPYTANIA z rysunku/specyfikacji (od użytkownika, doprecyzowuje intencję): "
+                    + json.dumps(ctx_bits, ensure_ascii=False)[:400]
+                    + ". Traktuj to jako sygnał MIĘKKI: WYMIARY orientacyjnie (bliższe = lepiej, ale nie odrzucaj z "
+                      "powodu samej różnicy rozmiaru); typ/kształt wspierają dopasowanie."
+                )})
         imgs = 0
         # Limit obrazów Sonnet ~20/żądanie (łącznie z obrazem zapytania). Budżet dzielimy na kandydatów,
         # żeby przy większym recall NIE przekroczyć limitu (inaczej wyjątek → fallback bez oceny).
@@ -343,9 +389,27 @@ def lambda_handler(event, _ctx):
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
 
+    # F2a: opcjonalny 2. obraz (rysunek techniczny / spec) → wyłuskanie pewnych cech (typ/kształt/wymiary).
+    query_context = None
+    ctx_b64 = body.get("contextImageBase64")
+    if ctx_b64:
+        if isinstance(ctx_b64, str) and ctx_b64.startswith("data:") and "," in ctx_b64:
+            ctx_b64 = ctx_b64.split(",", 1)[1]
+        try:
+            query_context = _extract_context(base64.b64decode(ctx_b64))
+        except Exception:  # noqa: BLE001
+            query_context = None
+
+    # hint = etykieta z auto-detekcji (np. 'stolik kawowy') + doprecyzowanie z rysunku (typ/kształt).
+    hint = (body.get("hint") or "").strip()
+    if isinstance(query_context, dict):
+        parts = [f"{lab}={query_context[k]}" for k, lab in (("typ", "typ"), ("ksztalt", "kształt"))
+                 if query_context.get(k)]
+        if parts:
+            hint = (hint + (" ; " if hint else "") + "z rysunku/spec: " + ", ".join(parts))
+
     # Opis wycinka zapytania NAJPIERW — daje kategorię (twarda bramka) + drugi sygnał do rerankingu.
-    # hint = etykieta z auto-detekcji (np. 'stolik kawowy') — naprowadza opis na właściwy obiekt (tło ignoruj).
-    query_attrs = _describe_query(image_bytes, body.get("hint"))
+    query_attrs = _describe_query(image_bytes, hint)
     cat = None
     if body.get("category"):
         cat = _norm_category(body.get("category"))  # jawne wymuszenie z UI (opcjonalne)
@@ -408,7 +472,7 @@ def lambda_handler(event, _ctx):
             c["image_urls"] = [c["image_s3_url"]]
 
     # Rerank Sonnet 4.5 na WSZYSTKICH zdjęciach + atrybutach + specyfikacji (kandydaci w tej samej kategorii).
-    order, scores, reasons = _rerank(image_bytes, cands, query_attrs)
+    order, scores, reasons = _rerank(image_bytes, cands, query_attrs, query_context)
 
     results = []
     for idx in order[:top_k]:
@@ -443,7 +507,8 @@ def lambda_handler(event, _ctx):
             item["catalogPageImageUrl"] = _page_image_url(c["catalog_pdf"], c["catalog_page"])  # lekki obraz strony
         results.append(item)
     # queryAttributes: co system „zrozumiał" z wycinka (do panelu „dlaczego podobne").
-    return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs})
+    return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs,
+                       "queryContext": query_context})
 
 
 def _resp(status, data):
