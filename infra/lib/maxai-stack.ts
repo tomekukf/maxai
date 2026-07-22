@@ -115,18 +115,20 @@ export class MaxaiStack extends Stack {
 
     // --- Cognito: uwierzytelnianie (Faza 7.4) ---
     // Role przez grupy: 'admin' (operacje destrukcyjne/import) i 'handlowiec'. Bez self-signup.
-    const userPool = new cognito.UserPool(this, 'UserPool', {
+    // Uwaga: pierwotny pool/klient/grupy zostały skasowane poza CFN (sprzątanie innego projektu w regionie).
+    // Zmieniono ID konstruktów (…V2), by CFN odtworzył je od nowa; „usunięcie" nieistniejących starych = no-op.
+    const userPool = new cognito.UserPool(this, 'UserPoolV2', {
       selfSignUpEnabled: false,
       signInAliases: { username: true, email: true },
       passwordPolicy: { minLength: 8, requireLowercase: true, requireDigits: true },
       removalPolicy: RemovalPolicy.DESTROY, // MVP
     });
-    const userPoolClient = userPool.addClient('WebClient', {
+    const userPoolClient = userPool.addClient('WebClientV2', {
       authFlows: { userPassword: true, userSrp: true }, // USER_PASSWORD_AUTH (formularz w aplikacji)
       generateSecret: false, // klient publiczny (SPA)
     });
-    new cognito.CfnUserPoolGroup(this, 'AdminGroup', { userPoolId: userPool.userPoolId, groupName: 'admin' });
-    new cognito.CfnUserPoolGroup(this, 'SalesGroup', { userPoolId: userPool.userPoolId, groupName: 'handlowiec' });
+    new cognito.CfnUserPoolGroup(this, 'AdminGroupV2', { userPoolId: userPool.userPoolId, groupName: 'admin' });
+    new cognito.CfnUserPoolGroup(this, 'SalesGroupV2', { userPoolId: userPool.userPoolId, groupName: 'handlowiec' });
 
     // Authorizer JWT (waliduje ID token; grupę 'admin' sprawdza Lambda w claims cognito:groups).
     const jwtAuth = new HttpJwtAuthorizer(
