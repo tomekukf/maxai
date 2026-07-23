@@ -189,6 +189,9 @@ export type SearchResponse = {
   queryAttributes?: Record<string, unknown> | null; // co system „zrozumiał" z wycinka
   queryContext?: Record<string, unknown> | null; // co odczytano z dołączonego rysunku/spec (F2a)
   mode?: 'quality' | 'fast'; // tryb użyty do rankingu
+  queryCategories?: string[]; // bramka: kategoria + kategorie siostrzane
+  weakMatch?: boolean; // sędzia ocenił wszystkich poniżej progu → w asortymencie nie ma odpowiednika
+  bestScore?: number | null; // najlepsza ocena rerankingu (0-100)
   recallK?: number; // faktyczna liczba ocenianych kandydatów (po przycięciu limitem kosztu)
   imageBudget?: number | null; // limit zdjęć wysłanych do sędziego (null w trybie szybkim)
 };
@@ -215,6 +218,9 @@ export async function searchByImage(
     queryAttributes: data.queryAttributes ?? null,
     queryContext: data.queryContext ?? null,
     mode: data.mode ?? undefined,
+    queryCategories: data.queryCategories ?? undefined,
+    weakMatch: !!data.weakMatch,
+    bestScore: data.bestScore ?? null,
     recallK: data.recallK ?? undefined,
     imageBudget: data.imageBudget ?? null,
   };

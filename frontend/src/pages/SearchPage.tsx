@@ -95,6 +95,8 @@ type SearchGroup = {
   queryAttrs: Record<string, unknown> | null;
   queryContext?: Record<string, unknown> | null; // odczytane z dołączonego rysunku/spec (F2a)
   mode?: 'quality' | 'fast';
+  weakMatch?: boolean; // brak odpowiednika w asortymencie (wszyscy kandydaci poniżej progu)
+  bestScore?: number | null;
   recallK?: number; // ilu kandydatów widział sędzia (do diagnostyki)
   results: SearchResult[];
   busy: boolean;
@@ -388,7 +390,7 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
     try {
       const res = await searchByImage(b64, k, hint, contextB64 ?? undefined, fastMode, recallK);
       setGroups((gs) => gs.map((g, i) => (i === gi
-        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, recallK: res.recallK ?? recallK, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
+        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, recallK: res.recallK ?? recallK, weakMatch: res.weakMatch, bestScore: res.bestScore ?? null, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
     } catch (e) {
       setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: false, error: (e as Error).message } : g)));
@@ -734,11 +736,25 @@ function GroupSection({
         <div>
           <div className="text-sm font-medium">{g.label}</div>
           <div className="text-xs text-slate-500">
-            {g.busy ? 'Szukam…' : g.queryCategory ? `kategoria: ${g.queryCategory} · ${grouped.length} propozycji` : `${grouped.length} propozycji`}
+            {g.busy
+              ? 'Szukam…'
+              : g.weakMatch
+                ? `kategoria: ${g.queryCategory ?? '—'} · ${grouped.length} najbliższych wizualnie (brak substytutów)`
+                : g.queryCategory
+                  ? `kategoria: ${g.queryCategory} · ${grouped.length} propozycji`
+                  : `${grouped.length} propozycji`}
             {g.mode === 'fast' && <span className="ml-1 rounded bg-slate-200 px-1 text-[10px] text-slate-600">tryb szybki (cosinus)</span>}
           </div>
         </div>
       </div>
+
+      {g.weakMatch && !g.busy && (
+        <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>W asortymencie nie ma odpowiednika tego produktu.</b>{' '}
+          Najlepsze dopasowanie to zaledwie {g.bestScore ?? 0}%, więc poniższych pozycji{' '}
+          <b>nie traktuj jako substytutów</b> — to tylko najbliższe wizualnie produkty z tej kategorii.
+        </div>
+      )}
 
       {contextSummary(g.queryContext) && (
         <div className="rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-slate-600">
@@ -802,6 +818,8 @@ function diagPayload(groups: SearchGroup[], note: string | null) {
       hint: g.hint ?? null,
       tryb: g.mode ?? 'quality',
       recallK: g.recallK ?? null, // ilu kandydatów trafiło do oceny (kluczowe przy „czemu nie ma X")
+      brakOdpowiednika: g.weakMatch ?? null, // sędzia ocenił wszystkich poniżej progu
+      najlepszaOcena: g.bestScore ?? null,
       kategoriaBramki: g.queryCategory,
       opisWycinka: g.queryAttrs,
       kontekstRysunku: g.queryContext ?? null,

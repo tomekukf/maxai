@@ -23,6 +23,27 @@ RERANK_MODEL_ID = os.environ.get("RERANK_MODEL_ID")  # Sonnet 4.5 (rerank; opcjo
 # Opis wycinka + kontekst z rysunku — tańszy Haiku (fallback: to co rerank). Rerank zostaje na Sonnet.
 DESCRIBE_MODEL_ID = os.environ.get("DESCRIBE_MODEL_ID") or RERANK_MODEL_ID
 
+# Poniżej tej oceny sędziego uznajemy, że w asortymencie NIE MA odpowiednika (UI pokazuje to wprost,
+# zamiast podawać 10-15% jako „propozycję"). Wyniki nadal zwracamy — jako „najbliższe wizualnie".
+WEAK_MATCH_BELOW = int(os.environ.get("WEAK_MATCH_BELOW", "30"))
+
+# Kategorie siostrzane dla bramki. Granica taksonomii nie zawsze pokrywa się z intencją:
+# „płytki podłogowe" opisujemy jako `podlogi` (u nas = panele/deski), a ceramika leży w `plytki`;
+# „szafka łazienkowa" trafia na `szafka` (meble pokojowe), a szafki podumywalkowe są w `lazienka`.
+# Bramka pozostaje TWARDA — poszerzamy tylko jej granicę o kategorie realnie wymienne.
+_SIBLING_CATEGORIES = {
+    "plytki": ("podlogi",),
+    "podlogi": ("plytki",),
+    "szafka": ("komoda", "mebel", "lazienka"),
+    "komoda": ("szafka", "mebel"),
+    "regal": ("szafka", "mebel"),
+    "mebel": ("szafka", "komoda", "regal"),
+    "stol": ("stolik",),
+    "stolik": ("stol",),
+    "sofa": ("naroznik",),
+    "naroznik": ("sofa",),
+}
+
 # --- Sufity kosztu jednego zapytania (zdjęcia to ~90% rachunku za rerank) ---
 RERANK_IMG_BUDGET = int(os.environ.get("RERANK_IMG_BUDGET", "8"))   # maks. zdjęć kandydatów na 1 rerank
 MAX_RECALL_QUALITY = int(os.environ.get("MAX_RECALL_QUALITY", "12"))  # maks. kandydatów do oceny sędziego
@@ -142,7 +163,11 @@ DESCRIBE_SYSTEM = (
     "lub poziome żłobienia), terrazzo/lastryko, wielkoformatowa płyta. UWAGA: element z zaokrągloną górną "
     "krawędzią to NIE heksagon — heksagon ma sześć PROSTYCH boków i ostre wierzchołki. Jeśli nie masz "
     "pewności, wpisz kształt opisowo (np. 'wydłużony łuk') zamiast zgadywać nazwę geometryczną. "
-    "Wynik wpisz do 'ksztalt_ogolny', a układ (rzędy przesunięte, jodełka, pionowo/poziomo) do 'wzor_faktura'."
+    "Wynik wpisz do 'ksztalt_ogolny'. "
+    "W 'wzor_faktura' podaj ZAWSZE dwie rzeczy osobno: (a) ORIENTACJĘ elementów — pionowo / poziomo / ukośnie; "
+    "(b) UKŁAD — w równych rzędach (stack bond, elementy jeden nad drugim) / przesunięty (cegiełkowy) / jodełka / "
+    "plaster miodu / losowy / modułowy. Nie pisz 'przesunięty', jeśli elementy tworzą równe kolumny lub rzędy — "
+    "sprawdź, czy fugi biegną nieprzerwaną linią (wtedy: w równych rzędach). Dopiero potem faktura (mat/połysk/struktura)."
 )
 
 # Normalizacja kategorii zwróconej przez model → kanoniczny slug (bramka).
@@ -316,14 +341,33 @@ def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
         content.append(
             {
                 "text": (
-                    "Oceń każdego kandydata jako STOPIEŃ DOPASOWANIA do ZAPYTANIA w skali 0-100 "
-                    "(100 = ten sam / bliźniaczy produkt; 0 = zupełnie inny). Każdy kandydat może mieć KILKA zdjęć "
-                    "(różne ujęcia/warianty) — oceniaj po całości. "
+                    "Oceń każdego kandydata jako STOPIEŃ DOPASOWANIA do ZAPYTANIA w skali 0-100. "
+                    "Każdy kandydat może mieć KILKA zdjęć (różne ujęcia/warianty) — oceniaj po całości. "
+                    "RUBRYKA (trzymaj się jej, nie zawyżaj): "
+                    "90-100 = ten sam lub bliźniaczy produkt: zgadza się kształt/bryła ORAZ kolor i wykończenie; "
+                    "70-89 = ten sam typ i kształt, ale wyraźnie inny kolor, materiał lub wykończenie; "
+                    "50-69 = pokrewna forma, widoczne różnice w proporcjach, konstrukcji lub układzie; "
+                    "30-49 = ten sam typ produktu, ale inna bryła/kształt; "
+                    "0-29 = inny typ produktu albo inna funkcja. "
+                    "Ocena 90+ jest ZAREZERWOWANA dla przypadków, w których handlowiec mógłby powiedzieć "
+                    "'to jest ten sam produkt'. Różnica orientacji układu (pionowo vs poziomo), formatu lub "
+                    "wykończenia (mat vs połysk) sama w sobie zdejmuje ocenę poniżej 90. "
                     "NAJWAŻNIEJSZE (decyduje o ocenie): BRYŁA, KSZTAŁT, PROPORCJE, SYLWETKA, KONSTRUKCJA/DETALE i typ — "
                     "to one wskazują ten sam model. Duży nacisk na zgodność opisu wizualnego (kształt/forma). "
-                    "KOLOR i MATERIAŁ traktuj jako DRUGORZĘDNE: ten sam produkt często występuje w różnych kolorach/"
-                    "tkaninach/wykończeniach (warianty), więc RÓŻNICA koloru lub materiału NIE obniża mocno oceny, "
-                    "jeśli bryła i kształt się zgadzają. Nie odrzucaj dobrego dopasowania kształtem tylko z powodu koloru. "
+                    + (
+                        # Powierzchnie: kolor i wzór SĄ produktem — szara płytka i miętowa to nie warianty.
+                        "UWAGA — to kategoria POWIERZCHNI (płytki/podłogi/tapety/dywany). Tutaj KOLOR i WZÓR są "
+                        "kryterium GŁÓWNYM, na równi z kształtem i formatem: produkt w innym odcieniu to INNY "
+                        "produkt, a nie wariant. Wyraźna różnica koloru (np. szary vs beżowy vs miętowy) obniża "
+                        "ocenę do maks. 60, nawet jeśli format i układ są identyczne. Zwróć też uwagę na "
+                        "ORIENTACJĘ układu (pionowo vs poziomo) i wykończenie (mat vs połysk). "
+                        if (query_attrs or {}).get("kategoria") in ("plytki", "podlogi", "tapety", "dywan")
+                        else
+                        "KOLOR i MATERIAŁ traktuj jako DRUGORZĘDNE: ten sam produkt często występuje w różnych "
+                        "kolorach/tkaninach/wykończeniach (warianty), więc RÓŻNICA koloru lub materiału NIE obniża "
+                        "mocno oceny, jeśli bryła i kształt się zgadzają. Nie odrzucaj dobrego dopasowania kształtem "
+                        "tylko z powodu koloru. "
+                    ) +
                     "Kandydaci mogą mieć PARAMETRY/specyfikację (moc W, barwa K, IP, kąt °, źródło światła, wymiary) — "
                     "użyj ich pomocniczo do potwierdzenia/rozróżnienia. Nie przeceniaj samej wielkości ani tła renderu. "
                     "POMIŃ tylko kandydatów o wyraźnie innej bryle/kształcie lub innym typie (nie umieszczaj ich w wynikach). "
@@ -591,14 +635,20 @@ def lambda_handler(event, _ctx):
         cat = _norm_category(body.get("category"))  # jawne wymuszenie z UI (opcjonalne)
     elif isinstance(query_attrs, dict):
         cat = _norm_category(query_attrs.get("kategoria"))
-    print(f"[gate] kategoria zapytania: {cat}")
+    # Bramka = kategoria + kategorie siostrzane (patrz _SIBLING_CATEGORIES).
+    gate_cats = [cat] + list(_SIBLING_CATEGORIES.get(cat, ())) if cat else []
+    print(f"[gate] kategoria zapytania: {cat} | pula kategorii: {gate_cats}")
 
     # Pula kandydatów szersza niż recall_k: miękkie sygnały mogą wyciągnąć w górę produkt,
     # który po samym cosinusie byłby poza zestawem dla sędziego (lepszy recall, koszt = tylko DB).
     pool_k = min(200, max(int(body.get("poolK") or 0), recall_k * 5, 40))
 
-    # TWARDA bramka kategorii: substytut zawsze w tej samej kategorii (nie 'lampa zamiast sofy').
-    where = "WHERE p.category = :cat " if cat else ""
+    # TWARDA bramka kategorii: substytut zawsze w tej samej (lub siostrzanej) kategorii — nie 'lampa zamiast sofy'.
+    cat_args = {f"c{i}": c for i, c in enumerate(gate_cats)}
+    where = (
+        "WHERE p.category IN (" + ", ".join(f":c{i}" for i in range(len(gate_cats))) + ") "
+        if gate_cats else ""
+    )
 
     def query():
         # Retrieve: TOP pool_k produktów (najlepsze ujęcie per produkt), z atrybutami i źródłem.
@@ -620,7 +670,7 @@ def lambda_handler(event, _ctx):
             "ORDER BY sim DESC "
             f"LIMIT {pool_k}"
         )
-        return _db().run(sql, q=vec, cat=cat) if cat else _db().run(sql, q=vec)
+        return _db().run(sql, q=vec, **cat_args)
 
     # Doszukanie po OPISIE: produkty, których opis wizualny/nazwa zawiera słowo kształtu z zapytania,
     # nawet gdy kosinus wypycha je poza pulę (Titan na płaskich wzorach patrzy na ton i gęstość faktury,
@@ -642,14 +692,13 @@ def lambda_handler(event, _ctx):
             "           1 - (pi.embedding <=> CAST(:q AS vector)) AS sim"
             "    FROM product_images pi JOIN products p ON p.id = pi.product_id"
             "    LEFT JOIN catalogs c ON c.id = p.catalog_id "
-            + (where + "AND (" if cat else "WHERE (") + conds + ")"
+            + (where + "AND (" if where else "WHERE (") + conds + ")"
             "  ) x"
             "  ORDER BY product_id, sim DESC"
             ") y ORDER BY sim DESC LIMIT 12"
         )
         args = {f"kw{i}": f"%{k}%" for i, k in enumerate(keywords)}
-        if cat:
-            args["cat"] = cat
+        args.update(cat_args)
         return _db().run(sql, q=vec, **args)
 
     try:
@@ -739,8 +788,16 @@ def lambda_handler(event, _ctx):
             item["catalogPageImageUrl"] = _page_image_url(c["catalog_pdf"], c["catalog_page"])  # lekki obraz strony
         results.append(item)
     # queryAttributes: co system „zrozumiał" z wycinka (do panelu „dlaczego podobne").
-    return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs,
+    # „Nie mamy odpowiednika": sędzia ocenił WSZYSTKICH poniżej progu. Wyniki zwracamy dalej
+    # (zasada „zawsze najbliższe"), ale UI ma powiedzieć wprost, że to nie są substytuty.
+    best = max((s for s in scores.values()), default=None)
+    weak = (not fast) and best is not None and best < WEAK_MATCH_BELOW
+    if weak:
+        print(f"[weak] najlepsza ocena {best}% < {WEAK_MATCH_BELOW}% — brak odpowiednika w asortymencie")
+    return _resp(200, {"results": results, "queryCategory": cat, "queryCategories": gate_cats,
+                       "queryAttributes": query_attrs,
                        "queryContext": query_context, "mode": "fast" if fast else "quality",
+                       "weakMatch": weak, "bestScore": best,
                        # Faktycznie użyte (po przycięciu limitem) — do diagnostyki i kontroli kosztu.
                        "recallK": recall_k, "imageBudget": None if fast else RERANK_IMG_BUDGET})
 
