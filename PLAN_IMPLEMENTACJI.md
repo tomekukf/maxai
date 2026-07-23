@@ -802,12 +802,78 @@ maxfliz (web, cała oferta, 17 źródeł) = 3744; MAXLIVING (catalog, 6 tematycz
   asortymentu, „Szukaj zaznaczonych (N)" i przełącznik trybu szybkiego (admin).
 - Ręczny kadr („Szukaj tego kadru" + „czego szukasz?") i załącznik rysunku/spec (F2a) — pod obrazem.
 
+### Faza 13 — Jakość rankingu, wyjaśnialność i sufity kosztów (2026-07-22/23)
+
+**Kontekst:** dwa realne zgłoszenia z testów (wanna przy zapytaniu o umywalkę; brak oczekiwanej płytki)
+pokazały granice samego embeddingu Titana. Wnioski poniżej są **zmierzone**, nie założone.
+
+**Krok 13.1 — Miękkie sygnały nie-wizualne + doszukiwanie po opisie** — ✅ ZROBIONE (wdrożone)
+- Diagnoza: Titan nie zna skali ani funkcji — katalogowe zdjęcie wanny wolnostojącej (biała owalna misa
+  na białym tle) leży bliżej okrągłej umywalki niż inne umywalki. Sprawdzone i **odrzucone** obejścia:
+  skala szarości po obu stronach (płytka spadła z 34 na 305 miejsce) i multi-probe upscale/tighter crop (41→54).
+- `_soft_rescore`: do kosinusa doliczane są sygnały — zgodność **podtypu** (+0,05 / −0,08), **słowo-klucz w nazwie**
+  (+0,05 / −0,08), **rozjazd wymiarów** > 2,5× (−0,05), **słowo kształtu w opisie kandydata** (+0,06).
+  Kategoria pozostaje **jedynym twardym filtrem**. „Rywale" (inne typy w tej samej kategorii) wyliczane
+  z danych — bez zaszytego słownika, więc mechanizm działa tak samo dla lamp, płytek i sof.
+- Słowa-klucze zapytania biorą się z opisu (`subtype`/`typ`) **oraz z etykiety zaznaczenia** (`hint`),
+  dopasowanie po rdzeniu słowa (polska fleksja: `pióro` łapie `pióra`).
+- **Doszukiwanie po opisie:** druga kwerenda dociąga kandydatów, których `attributes`/nazwa zawierają
+  słowo kształtu z zapytania, nawet gdy kosinus wypycha ich poza pulę. Działa tylko dla produktów z opisem (Faza 8.5).
+- Pula retrieve 5× `recallK` (min 40, maks. 200), przycinana do `recallK` **po** przeliczeniu sygnałów.
+- Wynik na zgłoszeniu #1: przed — wanna na #2 (63% vs 60,3%); po — 8/8 wyników to umywalki.
+
+**Krok 13.2 — Anty-zakotwiczenie sędziego + kształty powierzchni wzorzystych** — ✅ ZROBIONE (wdrożone)
+- Diagnoza ze zgłoszenia #2: opis wycinka nazwał wzór „heksagonalnym", choć na zdjęciu były łuski/pióra —
+  a sędzia poszedł za tekstem: przyznał 85–92% płytkom bez heksagonów („wyraźne elementy heksagonalne")
+  i odrzucał pozostałe „za brak heksagonu".
+- `_rerank`: opis zapytania podany jawnie jako **hipoteza** + reguła — kształt/wzór oceniaj z obrazu;
+  gdy obraz przeczy opisowi, ignoruj opis; nie przypisuj kandydatowi cech, których nie widać.
+- `DESCRIBE_SYSTEM`: sekcja o powierzchniach wzorzystych — nazwij kształt **pojedynczego elementu** z listy
+  (heksagon / łuska / pióro-wachlarz / arabeska / romb / cegiełka / prążek / terrazzo), z regułą
+  „zaokrąglona górna krawędź to NIE heksagon"; przy braku pewności opis zamiast nazwy geometrycznej.
+- Wynik: opis tego samego wycinka zmienił się na „pióro/wachlarz", a oczekiwana płytka weszła na **#1 z oceną 95%**
+  („identyczny kształt pióra/łuski, układ przesunięty, biała fuga").
+- Uwaga operacyjna: etykieta zaznaczenia mocno wpływa na opis — „Płytki heksagonalne jasne" wymusza heksagon,
+  a **bez etykiety** ten sam wycinek bywa klasyfikowany jako `tapety` (twarda bramka odcina wtedy płytki).
+
+**Krok 13.3 — Eksport diagnostyki wyszukiwania** — ✅ ZROBIONE (wdrożone)
+- „⬇ Eksport diagnostyki (JSON)": obraz zapytania (data URL), `hint`, tryb, **faktyczny `recallK`**, bramka
+  kategorii, opis wycinka, kontekst z rysunku + per kandydat: pozycja, id/SKU, podtyp, kosinus, wynik po korekcie
+  miękkiej, `softSignals`, `rerankScore`, uzasadnienie, `attributes`, `params`.
+- „📋 Kopiuj podsumowanie": zwięzła wersja tekstowa do wklejenia w zgłoszeniu. Oba pytają o uwagę użytkownika.
+- Kolumna „sygnały miękkie" w panelu diagnostycznym admina.
+
+**Krok 13.4 — Twarde sufity kosztu jednego zapytania** — ✅ ZROBIONE (wdrożone)
+- `RERANK_IMG_BUDGET` (dom. **8**) — twardy limit zdjęć na jeden rerank. Wcześniej budżet dzielił się przez
+  kandydatów, ale przy `recallK > 8` każdy dostawał własne zdjęcie → koszt rósł liniowo. Nadwyżkowi kandydaci
+  są teraz oceniani po nazwie/opisie/parametrach (oznaczeni `[BEZ ZDJĘCIA]`).
+- `MAX_RECALL_QUALITY` = **12** (było: brak limitu, potem 60), `MAX_RECALL_FAST` = 60 (tryb szybki nie woła Sonneta).
+  Backend przycina wartość z body niezależnie od UI; `/search` zwraca faktycznie użyte `recallK` i `imageBudget`.
+- **Nierówny podział budżetu:** czołówka dostaje +1 ujęcie z reszty budżetu (4 kandydatów → po 2 zdjęcia;
+  3 → 3/3/2). Przy `recallK=8` budżet jest zjedzony co do zdjęcia, więc zysk pojawia się przy mniejszych zestawach.
+- Efekt: sufit kosztu pojedynczego zapytania spadł z „nielimitowany" do ~35 gr; `recallK` regulowane z paska admina.
+
+**Krok 13.5 — Kanon doboru zdjęć + deduplikacja ujęć** — ✅ ZROBIONE (wdrożone)
+- Pomiar bazy: **39% produktów miało 1 zdjęcie**, średnia 2,8, maks. 20; **32% zdjęć dodatkowych** było
+  ≥0,9 podobnych do głównego. Retrieve bierze wszystkie ujęcia, ale do reranku pobierane są **maks. 4**
+  (`LIMIT 4`), a przy domyślnym `recallK=8` sędzia widzi **tylko zdjęcie główne**.
+- Stąd kanon (`docs/product-images-spec.md`): **3 zdjęcia na produkt, maks. 4**; `sortOrder: 0` = packshot
+  (jedyne widziane przez sędziego), potem inne ujęcie bryły, potem aranżacja/detal. Czarna lista: rysunki
+  techniczne, banery/opakowania, zdjęcia zbiorcze rodziny, kadry z produktem w tle, ten sam packshot w innej rozdzielczości.
+- `scripts/dedupe-images.mjs` — zachłanna deduplikacja w obrębie produktu (dry-run domyślnie, `APPLY=1` wykonuje;
+  nie rusza plików w S3; kontrola „0 produktów bez zdjęć"). **Próg 0,95, nie 0,90** — zweryfikowane wzrokowo:
+  przedział 0,90–0,95 zawiera **warianty kolorystyczne** (fotel BUNNY szary vs różowy = 0,904), których nie kasujemy.
+- Wykonane na produkcji: **10 876 → 8972 zdjęcia** (usunięto 1904 duplikaty ujęć).
+- Kanon wpięty w `scripts/prepare-catalog.py` (generowany `CLAUDE_INSTRUCTIONS.md`, krok 5 + weryfikacja),
+  `docs/admin-runbook.md` (widoczne w GUI) i `docs/product-description-spec.md`.
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)
 
-- Bedrock Haiku 4.5: ekstrakcja ~0,01 zł/produkt (30 sof ≈ 0,30 zł).
-- Bedrock Sonnet 5: analiza wizualizacji ~0,01–0,03 zł/wyszukiwanie.
+- Bedrock Haiku 4.5: ekstrakcja ~0,01 zł/produkt (30 sof ≈ 0,30 zł); opis wycinka przy `/search` ~2 gr.
+- Bedrock Sonnet 4.5 (rerank): **~30 gr/wyszukiwanie** przy budżecie 8 zdjęć — zdjęcia to ~90% tego rachunku.
+  Sufit jest twardy (`RERANK_IMG_BUDGET`), więc nie rośnie z `recallK`. Tryb szybki: ~2 gr (bez Sonneta).
 - Titan embeddingi: grosze. · S3/Lambda/API GW: Free Tier / grosze przy niskim ruchu.
 - RDS `db.t3.micro`: Free Tier 12 mies., potem ~kilkanaście–kilkadziesiąt zł/mies. (24/7, nie serverless).
 - **Realny koszt MVP: kilka–kilkanaście zł/mies.** Zawsze aktywny alert budżetowy.

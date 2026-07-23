@@ -105,7 +105,8 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - ✅ **Paginacja katalogu (wdrożona, poza numeracją faz).** `GET /products` z `limit`/`offset` + `total`, filtry server-side
   (`q`, `category`, `source`) + tryb `slim` (bez presignów, do statystyk); presign tylko widocznej strony. `CatalogPage` „Pokaż więcej"
   + wyszukiwarka/kategoria po stronie serwera (koniec ładowania 1908 rekordów naraz); `StatsPage` skanuje bazę w trybie `slim`.
-- 🎉 **Import danych UKOŃCZONY — stan bazy: 3879 produktów, 10874 zdjęcia (100% z embeddingiem), 23 usuwalne źródła.**
+- 🎉 **Import danych UKOŃCZONY — stan bazy (po deduplikacji ujęć, Faza 13.5): 3881 produktów, 8972 zdjęcia
+  (100% z embeddingiem), 23 usuwalne źródła.** Przed dedupem było 10 874 zdjęć.
   **maxfliz (web, cała oferta publiczna, 17 źródeł):** płytki 1306, oświetlenie 869, łazienka 779, dywany 180, sztukateria 147,
   meble 98, tapety 63, sofy 62, podłogi 62, stoliki 54, krzesła 44, fotele 25, drzwi 23, komody 14, szafki 10, lustra 5, regały 3.
   **MAXLIVING (catalog, 6 katalogów tematycznych): 135.** Każde źródło usuwalne (`DELETE /catalogs/{id}`), z linkiem do strony
@@ -130,9 +131,23 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   (obraz + ruchomy kadr po lewej, sticky panel „Wykryte produkty" po prawej) — każda podpowiedź to **checkbox
   „wyślij do analizy" + miniatura wycinka** (liczona lokalnie z canvas, odświeżana po poprawieniu kadru) + „popraw kadr";
   analiza startuje automatycznie po wgraniu, `↻ analizuj` do ponowienia. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 12.
-- ▶️ Następne (do rozważenia): dokończenie importu maxfliz (płytki/dywany/tapety/podłogi/drzwi/sztukateria/lustro — za zgodą, koszt Titan);
-  Faza 8.5 (generowanie i zapis opisów wizualnych `attributes` lokalnie); ew. dedykowany endpoint `/stats` (dziś statystyki liczone
-  przez pełny skan `slim` z frontu).
+- 🎉 **Faza 13 — Jakość rankingu, wyjaśnialność i sufity kosztów (ukończona, 2026-07-22/23).** Wywołana dwoma zgłoszeniami
+  z testów (wanna przy zapytaniu o umywalkę; brak oczekiwanej płytki). ✅ **13.1 sygnały miękkie:** do kosinusa doliczane
+  podtyp (+0,05/−0,08), słowo-klucz w nazwie (+0,05/−0,08), rozjazd wymiarów >2,5× (−0,05), słowo kształtu w opisie (+0,06);
+  słowa-klucze z opisu **oraz z etykiety zaznaczenia**, dopasowanie po rdzeniu (polska fleksja); **doszukiwanie po opisie**
+  dociąga kandydatów spoza puli wizualnej; pula retrieve 5×`recallK`. Kategoria dalej **jedynym twardym filtrem**.
+  ✅ **13.2 anty-zakotwiczenie sędziego** (opis = hipoteza; kształt oceniaj z obrazu) + **słownik kształtów powierzchni
+  wzorzystych** w `DESCRIBE_SYSTEM` (heksagon/łuska/pióro/arabeska/romb/cegiełka/prążek; „zaokrąglona krawędź to NIE heksagon").
+  ✅ **13.3 eksport diagnostyki** (JSON z obrazem zapytania + pełnym rozbiciem oceny; „Kopiuj podsumowanie"; kolumna
+  „sygnały miękkie"). ✅ **13.4 twarde sufity kosztu:** `RERANK_IMG_BUDGET=8` (zdjęcia to ~90% rachunku, limit nie rośnie
+  z `recallK`), `MAX_RECALL_QUALITY=12` / `MAX_RECALL_FAST=60`, nierówny podział budżetu (czołówka +1 ujęcie) — sufit
+  zapytania ~35 gr zamiast „nielimitowany". ✅ **13.5 kanon zdjęć** (`docs/product-images-spec.md`: 3 na produkt, maks. 4,
+  `sortOrder:0` = packshot bo tylko on trafia do sędziego) + **deduplikacja ujęć** (`scripts/dedupe-images.mjs`, próg **0,95**
+  — przy 0,90 giną warianty kolorystyczne; usunięto 1904). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 13.
+- ▶️ Następne (do rozważenia): **Faza 8.5 dla płytek** — bez opisów wizualnych kształt w tej kategorii nie istnieje jako sygnał
+  (nazwy to kody, `subtype` to format); dogenerować `attributes` lokalnie, partia walidacyjna ~100–150 szt.
+  Uzupełnienie zdjęć dla produktów z jednym ujęciem; dokończenie importu maxfliz; ew. dedykowany endpoint `/stats`
+  (dziś statystyki liczone przez pełny skan `slim` z frontu); hosting frontu (Amplify — **nie istnieje**, front działa lokalnie).
 
 ## Gotchas (git bash / AWS)
 - `MSYS_NO_PATHCONV=1` przed komendami z argumentami `/aws/...` (np. `aws logs`) — inaczej git bash konwertuje na ścieżkę Windows.
@@ -149,7 +164,12 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   - NIE używać Claude 3 Haiku (przestarzały).
 - **Embeddingi:** Amazon Titan Multimodal (1024 wym.).
 - **Kategoria = jedyny twardy filtr (od Fazy 5).** Substytut zawsze w tej samej kategorii; wszystko inne
-  (kolor, materiał, wymiar) pozostaje miękkie. Kontrolowana taksonomia wspólna dla importu i wyszukiwania.
+  (podtyp, kolor, materiał, wymiar) pozostaje miękkie — od Fazy 13.1 jako punktowane sygnały, nie `WHERE`.
+- **Zdjęcia produktu: 3, maksymalnie 4 (od Fazy 13.5).** `sortOrder: 0` = packshot, bo przy domyślnym `recallK`
+  **tylko zdjęcie główne trafia do sędziego**; do reranku pobierane są maks. 4 (`LIMIT 4`). Kanon i czarna lista
+  ujęć: `docs/product-images-spec.md` (obowiązuje każdy import i każdy model zasilający bazę).
+- **Sufity kosztu `/search` (od Fazy 13.4).** `RERANK_IMG_BUDGET=8` zdjęć na zapytanie (twardo, niezależnie od
+  `recallK`), `MAX_RECALL_QUALITY=12`, `MAX_RECALL_FAST=60`. Wszystko przez ENV — nie podnosić bez zgody.
 - **Bedrock tylko za zgodą (etap dev).** Nowa praca (scraping/kategoryzacja/opisy/model/GUI) = lokalny LLM (Claude Code);
   NIE dokładać nowych wywołań Bedrock bez zgody. Obecne zostają: Titan (import) + Sonnet opis/rerank (runtime `/search`).
   Szerszy Bedrock dopiero w testach finalnych.
