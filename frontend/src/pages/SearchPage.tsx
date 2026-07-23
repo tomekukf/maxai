@@ -95,6 +95,7 @@ type SearchGroup = {
   queryAttrs: Record<string, unknown> | null;
   queryContext?: Record<string, unknown> | null; // odczytane z dołączonego rysunku/spec (F2a)
   mode?: 'quality' | 'fast';
+  recallK?: number; // ilu kandydatów widział sędzia (do diagnostyki)
   results: SearchResult[];
   busy: boolean;
   loadingMore: boolean;
@@ -387,7 +388,7 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
     try {
       const res = await searchByImage(b64, k, hint, contextB64 ?? undefined, fastMode, recallK);
       setGroups((gs) => gs.map((g, i) => (i === gi
-        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
+        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, recallK, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
     } catch (e) {
       setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: false, error: (e as Error).message } : g)));
@@ -442,9 +443,9 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
               <input
                 type="number"
                 min={3}
-                max={40}
+                max={60}
                 value={recallK}
-                onChange={(e) => setRecallK(Math.max(3, Math.min(40, Number(e.target.value) || 8)))}
+                onChange={(e) => setRecallK(Math.max(3, Math.min(60, Number(e.target.value) || 8)))}
                 className="w-14 rounded border border-slate-300 px-1 py-0.5"
               />
               {recallK > 12 && !fastMode && <span className="text-amber-700">(drożej)</span>}
@@ -798,6 +799,7 @@ function diagPayload(groups: SearchGroup[], note: string | null) {
       etykieta: g.label,
       hint: g.hint ?? null,
       tryb: g.mode ?? 'quality',
+      recallK: g.recallK ?? null, // ilu kandydatów trafiło do oceny (kluczowe przy „czemu nie ma X")
       kategoriaBramki: g.queryCategory,
       opisWycinka: g.queryAttrs,
       kontekstRysunku: g.queryContext ?? null,
@@ -831,7 +833,7 @@ function diagText(groups: SearchGroup[], note: string | null): string {
   for (const g of groups) {
     const a = (g.queryAttrs ?? {}) as Record<string, unknown>;
     lines.push('');
-    lines.push(`== ${g.label} | tryb: ${g.mode ?? 'quality'} | hint: ${g.hint ?? '—'} | bramka: ${g.queryCategory ?? '—'}`);
+    lines.push(`== ${g.label} | tryb: ${g.mode ?? 'quality'} | recallK: ${g.recallK ?? '—'} | hint: ${g.hint ?? '—'} | bramka: ${g.queryCategory ?? '—'}`);
     lines.push(`   opis wycinka: subtype=${String(a.subtype ?? '—')}, typ=${String(a.typ ?? '—')}, kształt=${String(a.ksztalt_ogolny ?? '—')}, materiał=${String(a.material ?? '—')}, kolor=${String(a.kolor_dominujacy ?? '—')}`);
     g.results.forEach((r, i) => {
       const soft = r.softSignals

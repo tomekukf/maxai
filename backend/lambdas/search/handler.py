@@ -126,7 +126,18 @@ DESCRIBE_SYSTEM = (
     "downlight/zyrandol). Zwróć wyłącznie poprawny JSON o kluczach: kategoria, subtype, typ, "
     "ksztalt_ogolny, material, kolor_dominujacy, kolory_dodatkowe[], wzor_faktura, styl, cechy[], "
     "atrybuty_kategorii{}, opis_swobodny. Po polsku, zwięźle, skupiając się na cechach różnicujących "
-    "wygląd. Czego nie widać → null (lub []). Bez markdown, bez komentarzy."
+    "wygląd. Czego nie widać → null (lub []). Bez markdown, bez komentarzy. "
+    # Powierzchnie wzorzyste (płytki/mozaiki/tapety/podłogi): najczęstszy błąd to nazwanie
+    # każdego regularnego rastra 'heksagonem'. Wymuszamy obejrzenie OBRYSU pojedynczego elementu.
+    "POWIERZCHNIE WZORZYSTE (płytki, mozaiki, tapety, podłogi): opisz KSZTAŁT POJEDYNCZEGO ELEMENTU, "
+    "patrząc na jego obrys, nie na ogólne wrażenie rastra. Nazwij go z listy: heksagon/plaster miodu "
+    "(sześciokąt, 6 prostych boków), łuska/rybia łuska (dolna krawędź prosta, górna zaokrąglona), "
+    "pióro/wachlarz (wydłużony element zakończony półokrągło), arabeska/jaskółczy ogon (falowane boki), "
+    "romb, trójkąt, cegiełka/prostokąt (kafel poziomy lub pionowy), kwadrat, listwa/prążek (wąskie pionowe "
+    "lub poziome żłobienia), terrazzo/lastryko, wielkoformatowa płyta. UWAGA: element z zaokrągloną górną "
+    "krawędzią to NIE heksagon — heksagon ma sześć PROSTYCH boków i ostre wierzchołki. Jeśli nie masz "
+    "pewności, wpisz kształt opisowo (np. 'wydłużony łuk') zamiast zgadywać nazwę geometryczną. "
+    "Wynik wpisz do 'ksztalt_ogolny', a układ (rzędy przesunięte, jodełka, pionowo/poziomo) do 'wzor_faktura'."
 )
 
 # Normalizacja kategorii zwróconej przez model → kanoniczny slug (bramka).
@@ -389,6 +400,38 @@ W_SUBTYPE_BAD = -0.08    # kandydat ma inny podtyp (np. wanna przy zapytaniu o u
 W_NAME_OK = 0.05         # nazwa produktu zawiera słowo-klucz zapytania
 W_NAME_RIVAL = -0.08     # nazwa wskazuje inny typ z tej samej kategorii
 W_DIMS_BAD = -0.05       # wymiary rozjeżdżone o rząd wielkości (gdy znane po obu stronach)
+W_ATTR_KW = 0.06         # opis wizualny kandydata zawiera słowo kształtu/wzoru z zapytania
+
+# Słowa nieróżnicujące — nie nadają się na klucz kształtu/wzoru.
+_KW_STOP = {
+    "gladka", "gładka", "gladki", "gładki", "delikatnym", "delikatna", "delikatne", "regularny",
+    "regularnym", "nowoczesny", "nowoczesnym", "geometryczny", "geometrycznym", "powierzchnia",
+    "kolorze", "kolor", "wzorem", "wzor", "wzór", "ukladzie", "układzie", "uklad", "układ",
+    "plytki", "płytki", "plytka", "płytka", "scienne", "ścienne", "podlogowe", "podłogowe",
+    "matowa", "matowe", "polysk", "połysk", "jasny", "jasnym", "jasne", "bialy", "biały", "biale",
+    "ceramika", "ceramiczna", "ceramiczne", "minimalistyczny", "fugami", "fugowaniem",
+}
+
+
+def _query_keywords(query_attrs, hint_raw):
+    """Słowa-klucze kształtu/wzoru zapytania — do doszukania kandydatów po OPISIE (nie tylko pikselach)."""
+    src = []
+    if isinstance(query_attrs, dict):
+        for k in ("ksztalt_ogolny", "wzor_faktura", "typ", "subtype"):
+            v = query_attrs.get(k)
+            if isinstance(v, str):
+                src.append(v)
+    if hint_raw:
+        src.append(hint_raw)
+    out = []
+    for s in src:
+        for w in re.split(r"[^\wąćęłńóśźż]+", s.lower()):
+            if len(w) >= 5 and w not in _KW_STOP:
+                # Zgrubny rdzeń (polska fleksja): 'pióro'→'piór' złapie 'pióra', 'łuska'→'łusk' → 'łuski'.
+                stem = w[: max(4, len(w) - 2)]
+                if stem not in out:
+                    out.append(stem)
+    return out[:3]
 
 
 def _norm_txt(s):
@@ -408,7 +451,7 @@ def _max_dim(d):
     return max(vals) if vals else None
 
 
-def _soft_rescore(cands, query_attrs, hint_raw, query_context):
+def _soft_rescore(cands, query_attrs, hint_raw, query_context, keywords=None):
     """Dolicza miękkie sygnały do cosinusa i zwraca listę posortowaną malejąco.
 
     Słowa-klucze zapytania biorą się z opisu (subtype/typ) ORAZ z etykiety zaznaczenia
@@ -460,6 +503,13 @@ def _soft_rescore(cands, query_attrs, hint_raw, query_context):
             if c_dim and (max(q_dim, c_dim) / min(q_dim, c_dim)) > 2.5:
                 adj += W_DIMS_BAD
                 detail["wymiary"] = W_DIMS_BAD
+        # Opis wizualny kandydata (jeśli istnieje) zawiera słowo kształtu/wzoru z zapytania —
+        # jedyny sygnał kształtu tam, gdzie nazwa to kod produktu (np. płytki).
+        if keywords and c.get("attributes"):
+            blob = json.dumps(c["attributes"], ensure_ascii=False).lower()
+            if any(kw in blob for kw in keywords):
+                adj += W_ATTR_KW
+                detail["opis"] = W_ATTR_KW
         c["soft"] = detail or None
         c["adj"] = round(min(1.0, max(0.0, c["sim"] + adj)), 4)
 
@@ -488,7 +538,7 @@ def lambda_handler(event, _ctx):
 
     top_k = max(1, min(int(body.get("topK", 3)), 20))
     # Kandydaci do rerankingu (budżet obrazów dzielony na nich). Górny limit = ochrona kosztu Sonnet.
-    recall_k = max(top_k, min(int(body.get("recallK", 8)), 40))
+    recall_k = max(top_k, min(int(body.get("recallK", 8)), 60))
     fast = bool(body.get("fast"))  # tryb „szybki": sam cosinus (bez wizyjnego reranku Sonnet) — ~darmowy, do porównań/oszczędności
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
@@ -526,10 +576,11 @@ def lambda_handler(event, _ctx):
     # który po samym cosinusie byłby poza zestawem dla sędziego (lepszy recall, koszt = tylko DB).
     pool_k = min(200, max(int(body.get("poolK") or 0), recall_k * 5, 40))
 
+    # TWARDA bramka kategorii: substytut zawsze w tej samej kategorii (nie 'lampa zamiast sofy').
+    where = "WHERE p.category = :cat " if cat else ""
+
     def query():
         # Retrieve: TOP pool_k produktów (najlepsze ujęcie per produkt), z atrybutami i źródłem.
-        # TWARDA bramka kategorii: substytut zawsze w tej samej kategorii (nie 'lampa zamiast sofy').
-        where = "WHERE p.category = :cat " if cat else ""
         sql = (
             "SELECT * FROM ("
             "  SELECT DISTINCT ON (product_id) product_id, optima_id, name, params, subtype, group_id, image_s3_url,"
@@ -550,11 +601,52 @@ def lambda_handler(event, _ctx):
         )
         return _db().run(sql, q=vec, cat=cat) if cat else _db().run(sql, q=vec)
 
+    # Doszukanie po OPISIE: produkty, których opis wizualny/nazwa zawiera słowo kształtu z zapytania,
+    # nawet gdy kosinus wypycha je poza pulę (Titan na płaskich wzorach patrzy na ton i gęstość faktury,
+    # nie na obrys pojedynczego elementu). Działa tylko dla produktów, które MAJĄ opis (Faza 8.5).
+    keywords = _query_keywords(query_attrs, hint_raw)
+
+    def query_by_text():
+        if not keywords:
+            return []
+        conds = " OR ".join(f"pi.attributes::text ILIKE :kw{i} OR p.name ILIKE :kw{i}" for i in range(len(keywords)))
+        sql = (
+            "SELECT * FROM ("
+            "  SELECT DISTINCT ON (product_id) product_id, optima_id, name, params, subtype, group_id, image_s3_url,"
+            "         attributes, source, category, manufacturer, catalog_page, catalog_name, catalog_pdf, sim"
+            "  FROM ("
+            "    SELECT p.id AS product_id, p.optima_id, p.name, p.params, p.subtype, p.group_id, pi.image_s3_url,"
+            "           pi.attributes, p.source, p.category, p.manufacturer, p.catalog_page,"
+            "           c.name AS catalog_name, c.pdf_s3_url AS catalog_pdf,"
+            "           1 - (pi.embedding <=> CAST(:q AS vector)) AS sim"
+            "    FROM product_images pi JOIN products p ON p.id = pi.product_id"
+            "    LEFT JOIN catalogs c ON c.id = p.catalog_id "
+            + (where + "AND (" if cat else "WHERE (") + conds + ")"
+            "  ) x"
+            "  ORDER BY product_id, sim DESC"
+            ") y ORDER BY sim DESC LIMIT 12"
+        )
+        args = {f"kw{i}": f"%{k}%" for i, k in enumerate(keywords)}
+        if cat:
+            args["cat"] = cat
+        return _db().run(sql, q=vec, **args)
+
     try:
         rows = query()
     except Exception:  # noqa: BLE001
         _conn = None
         rows = query()
+
+    try:
+        extra = query_by_text()
+    except Exception as e:  # noqa: BLE001
+        print(f"[recall-tekst] blad: {str(e)[:120]}")
+        extra = []
+    if extra:
+        seen = {str(r[0]) for r in rows}
+        added = [r for r in extra if str(r[0]) not in seen]
+        print(f"[recall-tekst] slowa={keywords} | dociagnieto {len(added)} kandydatow spoza puli wizualnej")
+        rows = list(rows) + added
 
     cands = [
         {
@@ -569,7 +661,7 @@ def lambda_handler(event, _ctx):
     ]
 
     # Miękkie sygnały (podtyp/nazwa/wymiary) → przesortowanie puli i przycięcie do recall_k.
-    cands = _soft_rescore(cands, query_attrs, hint_raw, query_context)[:recall_k]
+    cands = _soft_rescore(cands, query_attrs, hint_raw, query_context, keywords)[:recall_k]
 
     # Wszystkie zdjęcia kandydata (do rerankingu wielozdjęciowego); w wyniku pokazujemy jedno.
     for c in cands:
