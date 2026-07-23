@@ -130,15 +130,31 @@ w panelu admina (Import kolekcji).
           "manufacturer": "...", "manufacturerCode": "<pierwszy kod>",
           "params": {{ "codes": [...], "material": "...", "finish": "...", "printed_page": N, "viewer_page": N }},
           "catalogPage": <pdf_index+1>,
-          "images": [ {{ "file": "nazwa.jpg", "role": "cutout|lifestyle" }} ] }}
+          "images": [ {{ "file": "nazwa.jpg", "sortOrder": 0, "role": "cutout|lifestyle" }} ] }}
      ]
    }}
    ```
    - Zdjęcia zapisz do `rawdata/{args.name}/images/`; `images[].file` = sama nazwa pliku.
    - `embedding` POMIŃ (policzy Titan przy imporcie). Atrybuty wizualne opcjonalnie.
-5. **Zweryfikuj:** liczba produktów, brak duplikatów kodów, próbka wpisów sensowna.
-   Wypisz podsumowanie (ile produktów, rozkład subtype).
-6. (Opcjonalnie) PDF do S3 pod link „Otwórz katalog":
+
+5. **Zdjęcia — dobór wg `docs/product-images-spec.md` (obowiązkowo przeczytaj).** Skrót:
+   - **3 zdjęcia na produkt, maksymalnie 4.** Piąte i dalsze system ignoruje (`LIMIT 4`),
+     więc nie marnuj na nie miejsca ani embeddingów.
+   - **`sortOrder: 0` to zdjęcie GŁÓWNE i jedyne, które w domyślnej konfiguracji widzi
+     model oceniający wyniki.** Wybierz packshot na jednolitym tle, cały produkt, front lub 3/4,
+     pokazujący bryłę bez zakłóceń. To najważniejsza decyzja w całym imporcie.
+   - Kolejne: `1` = inne ujęcie bryły (bok/tył/góra), `2` = aranżacja lub detal faktury.
+   - **Nie wciągaj:** rysunków technicznych, banerów i grafik opakowań, zdjęć zbiorczych
+     rodziny produktów, kadrów gdzie produkt jest tłem lub zajmuje < ⅓ kadru, oraz tego
+     samego packshotu w innej rozdzielczości.
+   - **Nie wciągaj duplikatów ujęcia** (dwa kadry różniące się tylko obrotem/cieniem — bierz jeden).
+     Ale **warianty kolorystyczne zostaw** — kolor bywa jedynym sygnałem odróżniającym.
+   - Jeśli dla jakiegoś produktu jedyne dostępne zdjęcie łamie te zasady — wciągnij je,
+     ale wypisz ten produkt w podsumowaniu jako „wymaga poprawki zdjęcia głównego".
+6. **Zweryfikuj:** liczba produktów, brak duplikatów kodów, próbka wpisów sensowna,
+   **średnia liczba zdjęć na produkt w przedziale 1–4** (jeśli wyżej — nadmiar do wycięcia).
+   Wypisz podsumowanie (ile produktów, rozkład subtype, rozkład liczby zdjęć).
+7. (Opcjonalnie) PDF do S3 pod link „Otwórz katalog":
    `aws s3 cp "{args.pdf}" s3://<bucket>/catalogs/{args.name}/original.pdf` (bucket = output `FilesBucketName`).
 
 ## Po zakończeniu

@@ -8,6 +8,9 @@ porównywalne i stanowią drugi (obok embeddingu wizualnego) „punkt zaczepieni
 > Zmiany w tym pliku są nadrzędne. Prompt w Lambdach (`backend/lambdas/describe/…`) musi być
 > z nim zsynchronizowany (kopiujemy stąd).
 
+> **Ile zdjęć i które wciągać do bazy** — osobny kanon: `docs/product-images-spec.md`
+> (3 zdjęcia na produkt, maks. 4; `sortOrder: 0` = packshot, bo tylko on trafia do reranku).
+
 ## Zasady ogólne
 
 1. Opisuj **wyłącznie to, co widać** na obrazie. Nie zgaduj marki, ceny, wymiarów w cm

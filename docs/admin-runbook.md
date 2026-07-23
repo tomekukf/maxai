@@ -74,6 +74,20 @@ Pełny przepływ (0 wywołań Bedrock vision):
    `aws s3 cp rawdata/<nazwa>/pages "s3://<bucket>/catalogs/<folder>/pages/" --recursive`.
    Oraz PDF: `aws s3 cp <pdf> s3://<bucket>/catalogs/<folder>/original.pdf`.
 
+### Zdjęcia produktów — ile i które (kanon)
+
+Pełne zasady: `docs/product-images-spec.md`. Skrót, bo to najczęstsze źródło słabych wyników:
+
+- **3 zdjęcia na produkt, maksymalnie 4** — piąte i dalsze system ignoruje (do reranku pobiera `LIMIT 4`).
+- **Zdjęcie główne (`sortOrder: 0`) to jedyne, które przy domyślnych ustawieniach ogląda model
+  oceniający wyniki.** Musi to być packshot na jednolitym tle, cały produkt, front lub 3/4.
+- Kolejne: inne ujęcie bryły (bok/tył), potem aranżacja lub detal faktury.
+- **Nie wciągamy:** rysunków technicznych, banerów/opakowań, zdjęć zbiorczych rodziny produktów,
+  kadrów gdzie produkt jest tłem, ani tego samego packshotu w innej rozdzielczości.
+- **Duplikaty ujęcia** usuwa `node scripts/dedupe-images.mjs` (dry-run domyślnie, `APPLY=1` wykonuje).
+  Bezpieczny próg: `THRESHOLD=0.95`. Przy 0.90 kasowane są **warianty kolorystyczne** — nie schodź niżej.
+- Zły kadr jako główny naprawiasz bez re-importu: **Katalog → podgląd produktu → „Ustaw jako główne"**.
+
 ### Ręczna orchestracja (komendy)
 
 Gdy chcesz zrobić wszystko z konsoli, bez GUI:

@@ -284,8 +284,15 @@ def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
         # TWARDY budżet obrazów (zdjęcia = ~90% kosztu Sonnet). Nie rośnie z liczbą kandydatów:
         # przy większym recallK nadwyżkowi kandydaci są oceniani po nazwie/opisie/parametrach, bez zdjęć.
         # Dzięki temu koszt pojedynczego zapytania ma sufit niezależny od ustawień z UI.
-        per_cand = max(1, min(3, RERANK_IMG_BUDGET // max(1, len(cands))))
+        #
+        # Podział budżetu jest NIERÓWNY: czołówka (najwyższy wynik po sygnałach miękkich) dostaje
+        # 2 ujęcia, reszta po 1. Drugie ujęcie najbardziej pomaga tam, gdzie decyduje się wynik —
+        # przy tym samym koszcie. `cands` jest już posortowane malejąco przez _soft_rescore.
+        base = max(1, min(3, RERANK_IMG_BUDGET // max(1, len(cands))))
+        spare = max(0, RERANK_IMG_BUDGET - base * len(cands))  # ile zdjęć zostaje na czołówkę
+        top_n = min(3, spare) if base < 3 else 0               # ilu kandydatom dołożyć +1 ujęcie
         for i, c in enumerate(cands):
+            per_cand = base + 1 if i < top_n else base
             attrs = json.dumps(c.get("attributes") or {}, ensure_ascii=False)[:400]
             params = json.dumps(c.get("params") or {}, ensure_ascii=False)[:400]
             no_img = imgs >= RERANK_IMG_BUDGET
