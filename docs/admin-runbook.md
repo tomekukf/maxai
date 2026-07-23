@@ -61,6 +61,9 @@ Zmienne: `DB_SECRET` = nazwa sekretu z Secrets Manager (output stacku `DbSecretN
 
 ## Onboarding nowego katalogu (od PDF do bazy)
 
+> **Najprościej: w Claude Code wpisz `/import-katalog`** — skill prowadzi cały przepływ (sondowanie źródła,
+> skrypt ekstrakcji, próbka do akceptacji, import, kontrola jakości) i sam czyta wszystkie kanony.
+>
 > **Kanon importu: `docs/catalog-import-spec.md`** — przeczytaj przed każdym zasilaniem bazy.
 > Opisuje, co które pole robi w wyszukiwaniu, jak wybierać kategorię i subtype, jak nazywać produkty,
 > co zapisywać „na zapas" pod przyszłe zmiany oraz listę kontroli jakości po imporcie.

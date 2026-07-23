@@ -22,6 +22,8 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   (katalog PDF, scraping, plik od producenta) albo pisanie skryptu ekstrakcji.** Mówi, które pole
   do czego służy w rankingu, jak wybierać kategorię/subtype/nazwę, co zapisać „na zapas" i jak
   sprawdzić import. Gdy użytkownik mówi „przygotuj katalog X" / „zaimportuj dane" — start jest tutaj.
+  **Przepływ pracy jest opakowany w skilla `/import-katalog`** (`.claude/skills/import-katalog/SKILL.md`) —
+  uruchom go zamiast odtwarzać kroki z pamięci.
 - `docs/product-images-spec.md` — ile zdjęć i które (3, maks. 4; `sortOrder: 0` = packshot).
 - `docs/product-description-spec.md` — schemat i prompt opisu wizualnego (`attributes`).
 - `docs/admin-runbook.md` — procedury operacyjne (widoczne też w GUI, zakładka Dokumentacja).

@@ -267,6 +267,9 @@ Decyzje o rankingu zmieniają się (w tym projekcie zmieniły się kilka razy w 
 
 ## 13. Przepływ pracy ze mną (Claude Code)
 
+> **Najkrócej: wpisz `/import-katalog`.** Skill (`.claude/skills/import-katalog/SKILL.md`) prowadzi
+> wszystkie kroki poniżej i sam wczytuje ten kanon oraz kanony zdjęć i opisu.
+
 1. **Bootstrap:** `python scripts/prepare-catalog.py <pdf> <nazwa> [--manufacturer X] [--category Y]`
    → `rawdata/<nazwa>/PROBE.json` + `CLAUDE_INSTRUCTIONS.md` + `samples/`.
 2. Powiedz mi: **„przygotuj katalog `<nazwa>`"**. Przeczytam ten kanon + `CLAUDE_INSTRUCTIONS.md`,
