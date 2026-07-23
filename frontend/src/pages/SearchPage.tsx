@@ -662,9 +662,27 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
                 🖨️ Drukuj / zapisz PDF
               </button>
               {admin && (
-                <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
-                  {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
-                </button>
+                <>
+                  <button onClick={() => setDiag((d) => !d)} className="text-xs text-blue-700 hover:underline">
+                    {diag ? 'Ukryj diagnostykę' : '🔬 Tryb diagnostyczny'}
+                  </button>
+                  <button
+                    onClick={() => exportDiag(groups)}
+                    disabled={anyBusy || !groups.some((g) => g.results.length)}
+                    className="text-xs text-blue-700 hover:underline disabled:opacity-40"
+                    title="Zapisz plik JSON ze wszystkim, co potrzebne do debugu rankingu (obraz zapytania, opis, kosinus, sygnały miękkie, oceny sędziego)"
+                  >
+                    ⬇ Eksport diagnostyki (JSON)
+                  </button>
+                  <button
+                    onClick={() => copyDiag(groups)}
+                    disabled={anyBusy || !groups.some((g) => g.results.length)}
+                    className="text-xs text-blue-700 hover:underline disabled:opacity-40"
+                    title="Skopiuj zwięzłe podsumowanie tekstowe (bez obrazów) — do wklejenia w zgłoszeniu"
+                  >
+                    📋 Kopiuj podsumowanie
+                  </button>
+                </>
               )}
             </div>
             {groups.map((g, gi) => (
@@ -748,6 +766,98 @@ function groupResults(results: SearchResult[]): Grouped[] {
     }
   }
   return order.map((k) => map.get(k) as Grouped);
+}
+
+// --- Eksport diagnostyki (admin) -------------------------------------------
+// Cel: zebrać w jednym pliku wszystko, co potrzebne do debugu rankingu — obraz zapytania,
+// co model z niego zrozumiał, bramkę kategorii, tryb oraz per kandydat: kosinus, sygnały
+// miękkie, ocenę sędziego i uzasadnienie. Plik można oddać do analizy 1:1.
+function diagPayload(groups: SearchGroup[], note: string | null) {
+  return {
+    app: 'maxai',
+    format: 'diag-1',
+    czas: new Date().toISOString(),
+    uwagaUzytkownika: note || null,
+    zapytania: groups.map((g) => ({
+      etykieta: g.label,
+      hint: g.hint ?? null,
+      tryb: g.mode ?? 'quality',
+      kategoriaBramki: g.queryCategory,
+      opisWycinka: g.queryAttrs,
+      kontekstRysunku: g.queryContext ?? null,
+      obrazZapytaniaDataUrl: g.queryImg || null,
+      blad: g.error ?? null,
+      wyniki: g.results.map((r, i) => ({
+        pozycja: i + 1,
+        id: r.id ?? null,
+        nazwa: r.name,
+        sku: variantCode(r) || null,
+        podtyp: r.subtype ?? null,
+        kategoria: r.category ?? null,
+        zrodlo: r.source ?? null,
+        dopasowanieProc: Math.round((r.similarity ?? 0) * 100),
+        rerankScore: r.rerankScore ?? null,
+        kosinusTitan: r.visualSimilarity != null ? Math.round(r.visualSimilarity * 100) : null,
+        poKorekcieMiekkiej: r.adjustedSimilarity != null ? Math.round(r.adjustedSimilarity * 100) : null,
+        sygnalyMiekkie: r.softSignals ?? null,
+        powodSedziego: r.reason ?? null,
+        atrybutyProduktu: r.attributes ?? null,
+        params: r.params ?? null,
+      })),
+    })),
+  };
+}
+
+// Zwięzła wersja tekstowa — do wklejenia w czacie/zgłoszeniu (bez obrazów i JSON-ów).
+function diagText(groups: SearchGroup[], note: string | null): string {
+  const lines: string[] = [`maxai — diagnostyka wyszukiwania (${new Date().toLocaleString('pl-PL')})`];
+  if (note) lines.push(`Uwaga: ${note}`);
+  for (const g of groups) {
+    const a = (g.queryAttrs ?? {}) as Record<string, unknown>;
+    lines.push('');
+    lines.push(`== ${g.label} | tryb: ${g.mode ?? 'quality'} | hint: ${g.hint ?? '—'} | bramka: ${g.queryCategory ?? '—'}`);
+    lines.push(`   opis wycinka: subtype=${String(a.subtype ?? '—')}, typ=${String(a.typ ?? '—')}, kształt=${String(a.ksztalt_ogolny ?? '—')}, materiał=${String(a.material ?? '—')}, kolor=${String(a.kolor_dominujacy ?? '—')}`);
+    g.results.forEach((r, i) => {
+      const soft = r.softSignals
+        ? Object.entries(r.softSignals).map(([k, v]) => `${k}${v > 0 ? '+' : ''}${Math.round(v * 100)}`).join(' ')
+        : '—';
+      lines.push(
+        `   ${i + 1}. ${Math.round((r.similarity ?? 0) * 100)}% [${r.subtype ?? '—'}] ${r.name}` +
+          ` | cos=${r.visualSimilarity != null ? Math.round(r.visualSimilarity * 100) : '—'}` +
+          ` adj=${r.adjustedSimilarity != null ? Math.round(r.adjustedSimilarity * 100) : '—'}` +
+          ` rerank=${r.rerankScore ?? '—'} | miękkie: ${soft}` +
+          (r.reason ? ` | powód: ${r.reason}` : ''),
+      );
+    });
+  }
+  return lines.join('\n');
+}
+
+function exportDiag(groups: SearchGroup[]) {
+  const withResults = groups.filter((g) => g.results.length || g.error);
+  if (!withResults.length) return;
+  const note = window.prompt('Uwaga do wyników (trafi do pliku — opcjonalnie):', '') ?? null;
+  const payload = diagPayload(withResults, note);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = `maxai-diag-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyDiag(groups: SearchGroup[]) {
+  const withResults = groups.filter((g) => g.results.length || g.error);
+  if (!withResults.length) return;
+  const note = window.prompt('Uwaga do wyników (trafi do schowka — opcjonalnie):', '') ?? null;
+  try {
+    await navigator.clipboard.writeText(diagText(withResults, note));
+    alert('Skopiowano podsumowanie diagnostyki do schowka.');
+  } catch {
+    alert('Nie udało się skopiować — użyj eksportu do pliku JSON.');
+  }
 }
 
 // Podsumowanie wyszukiwania do druku/PDF — nowe okno z samodzielnym HTML (zdjęcia jako <img>,
