@@ -23,6 +23,11 @@ RERANK_MODEL_ID = os.environ.get("RERANK_MODEL_ID")  # Sonnet 4.5 (rerank; opcjo
 # Opis wycinka + kontekst z rysunku — tańszy Haiku (fallback: to co rerank). Rerank zostaje na Sonnet.
 DESCRIBE_MODEL_ID = os.environ.get("DESCRIBE_MODEL_ID") or RERANK_MODEL_ID
 
+# --- Sufity kosztu jednego zapytania (zdjęcia to ~90% rachunku za rerank) ---
+RERANK_IMG_BUDGET = int(os.environ.get("RERANK_IMG_BUDGET", "8"))   # maks. zdjęć kandydatów na 1 rerank
+MAX_RECALL_QUALITY = int(os.environ.get("MAX_RECALL_QUALITY", "12"))  # maks. kandydatów do oceny sędziego
+MAX_RECALL_FAST = int(os.environ.get("MAX_RECALL_FAST", "60"))        # tryb szybki nie woła Sonneta → można głębiej
+
 # path-style presigned GET (jak w /uploads/presign — unika 307)
 s3 = boto3.client(
     "s3",
@@ -276,19 +281,27 @@ def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
                       "powodu samej różnicy rozmiaru); typ/kształt wspierają dopasowanie."
                 )})
         imgs = 0
-        # Budżet obrazów do reranku (koszt Sonnet ~ liczba zdjęć). Obniżony (A): ~8 zdjęć łącznie zamiast ~16 —
-        # kształt/bryłę widać na 1-2 ujęciach, więc jakość ~bez zmian, a koszt ~2× mniejszy. Dzielimy na kandydatów.
-        per_cand = max(1, min(3, 8 // max(1, len(cands))))
+        # TWARDY budżet obrazów (zdjęcia = ~90% kosztu Sonnet). Nie rośnie z liczbą kandydatów:
+        # przy większym recallK nadwyżkowi kandydaci są oceniani po nazwie/opisie/parametrach, bez zdjęć.
+        # Dzięki temu koszt pojedynczego zapytania ma sufit niezależny od ustawień z UI.
+        per_cand = max(1, min(3, RERANK_IMG_BUDGET // max(1, len(cands))))
         for i, c in enumerate(cands):
             attrs = json.dumps(c.get("attributes") or {}, ensure_ascii=False)[:400]
             params = json.dumps(c.get("params") or {}, ensure_ascii=False)[:400]
+            no_img = imgs >= RERANK_IMG_BUDGET
             # Kontekst kandydata: nazwa + podtyp + opis wizualny + PARAMETRY (specyfikacja techniczna).
             content.append({
                 "text": f"Kandydat {i}: {c.get('name') or ''} (podtyp: {c.get('subtype') or '?'}). "
                         f"Opis: {attrs}. Parametry/specyfikacja: {params}"
+                        + (" [BEZ ZDJĘCIA — oceniaj po opisie i parametrach; przy niepewności oceniaj ostrożnie]"
+                           if no_img else "")
             })
+            if no_img:
+                continue
             # Zdjęcia kandydata (wiele ujęć, w ramach budżetu obrazów).
             for url in (c.get("image_urls") or [c.get("image_s3_url")])[:per_cand]:
+                if imgs >= RERANK_IMG_BUDGET:
+                    break
                 b = _get_s3_bytes(url) if url else None
                 if b:
                     content.append({"image": {"format": _img_format(b), "source": {"bytes": b}}})
@@ -537,9 +550,10 @@ def lambda_handler(event, _ctx):
         return _resp(400, {"error": "Nieprawidłowy base64"})
 
     top_k = max(1, min(int(body.get("topK", 3)), 20))
-    # Kandydaci do rerankingu (budżet obrazów dzielony na nich). Górny limit = ochrona kosztu Sonnet.
-    recall_k = max(top_k, min(int(body.get("recallK", 8)), 60))
     fast = bool(body.get("fast"))  # tryb „szybki": sam cosinus (bez wizyjnego reranku Sonnet) — ~darmowy, do porównań/oszczędności
+    # Kandydaci do oceny. Limit zależny od trybu: w trybie jakości każdy kandydat kosztuje (tekst + ew. zdjęcie),
+    # w szybkim nie ma wywołania Sonneta, więc można patrzeć głębiej za darmo.
+    recall_k = max(top_k, min(int(body.get("recallK", 8)), MAX_RECALL_FAST if fast else MAX_RECALL_QUALITY))
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
 
@@ -719,7 +733,9 @@ def lambda_handler(event, _ctx):
         results.append(item)
     # queryAttributes: co system „zrozumiał" z wycinka (do panelu „dlaczego podobne").
     return _resp(200, {"results": results, "queryCategory": cat, "queryAttributes": query_attrs,
-                       "queryContext": query_context, "mode": "fast" if fast else "quality"})
+                       "queryContext": query_context, "mode": "fast" if fast else "quality",
+                       # Faktycznie użyte (po przycięciu limitem) — do diagnostyki i kontroli kosztu.
+                       "recallK": recall_k, "imageBudget": None if fast else RERANK_IMG_BUDGET})
 
 
 def _resp(status, data):

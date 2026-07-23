@@ -189,6 +189,8 @@ export type SearchResponse = {
   queryAttributes?: Record<string, unknown> | null; // co system „zrozumiał" z wycinka
   queryContext?: Record<string, unknown> | null; // co odczytano z dołączonego rysunku/spec (F2a)
   mode?: 'quality' | 'fast'; // tryb użyty do rankingu
+  recallK?: number; // faktyczna liczba ocenianych kandydatów (po przycięciu limitem kosztu)
+  imageBudget?: number | null; // limit zdjęć wysłanych do sędziego (null w trybie szybkim)
 };
 
 export async function searchByImage(
@@ -213,6 +215,8 @@ export async function searchByImage(
     queryAttributes: data.queryAttributes ?? null,
     queryContext: data.queryContext ?? null,
     mode: data.mode ?? undefined,
+    recallK: data.recallK ?? undefined,
+    imageBudget: data.imageBudget ?? null,
   };
 }
 

@@ -388,7 +388,7 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
     try {
       const res = await searchByImage(b64, k, hint, contextB64 ?? undefined, fastMode, recallK);
       setGroups((gs) => gs.map((g, i) => (i === gi
-        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, recallK, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
+        ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, recallK: res.recallK ?? recallK, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
     } catch (e) {
       setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: false, error: (e as Error).message } : g)));
@@ -437,18 +437,20 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
             </span>
             <label
               className="flex items-center gap-1 text-slate-700"
-              title="Ilu kandydatów z retrieve trafia do oceny sędziego. Więcej = większa szansa, że produkt spoza ścisłej czołówki kosinusa w ogóle zostanie oceniony, ale i wyższy koszt Sonnet."
+              title="Ilu kandydatów trafia do oceny. W trybie jakości limit 12 (ochrona kosztu); w szybkim do 60, bo tam nie ma wywołania Sonneta. Backend i tak przycina wartość do limitu."
             >
               kandydatów do oceny
               <input
                 type="number"
                 min={3}
-                max={60}
+                max={fastMode ? 60 : 12}
                 value={recallK}
                 onChange={(e) => setRecallK(Math.max(3, Math.min(60, Number(e.target.value) || 8)))}
                 className="w-14 rounded border border-slate-300 px-1 py-0.5"
               />
-              {recallK > 12 && !fastMode && <span className="text-amber-700">(drożej)</span>}
+              <span className="text-slate-400">
+                {fastMode ? '(maks. 60 — za darmo)' : `(maks. 12; zdjęć do sędziego maks. 8)${recallK > 12 ? ' — przytnę do 12' : ''}`}
+              </span>
             </label>
           </div>
         )}
