@@ -867,6 +867,42 @@ pokazały granice samego embeddingu Titana. Wnioski poniżej są **zmierzone**, 
 - Kanon wpięty w `scripts/prepare-catalog.py` (generowany `CLAUDE_INSTRUCTIONS.md`, krok 5 + weryfikacja),
   `docs/admin-runbook.md` (widoczne w GUI) i `docs/product-description-spec.md`.
 
+**Krok 13.6 — Uczciwość wyniku: „brak odpowiednika", bramka siostrzana, rubryka ocen** — ✅ ZROBIONE (wdrożone)
+- Diagnoza z trzeciego zgłoszenia (5 zapytań): dwa z nich **nie miały odpowiedzi w bazie**
+  (0 szafek podumywalkowych, 0 terrazzo w całym asortymencie), a mimo to system pokazał listę propozycji
+  z ocenami 15% i 0%. To był główny powód wrażenia „porażka", a nie sam ranking.
+- **Stan „brak odpowiednika":** gdy najlepsza ocena sędziego < `WEAK_MATCH_BELOW` (dom. 30), odpowiedź niesie
+  `weakMatch` + `bestScore`, a UI pokazuje ostrzeżenie i opisuje listę jako „najbliższe wizualnie (brak substytutów)".
+  Wyniki nadal zwracamy — zasada „zawsze najbliższe" zostaje, znika tylko udawanie oferty.
+- **Kategorie siostrzane w bramce** (`_SIBLING_CATEGORIES`): `plytki↔podlogi`, `szafka→komoda/mebel/lazienka`,
+  `stol↔stolik`, `sofa↔naroznik`. Powód: taksonomia nie pokrywa się z intencją — „płytki podłogowe" opisujemy jako
+  `podlogi` (u nas panele/deski), a ceramika leży w `plytki`; „szafka łazienkowa" trafia na `szafka` (11 mebli
+  pokojowych), a szafki podumywalkowe byłyby w `lazienka`. **Bramka pozostaje twarda** — przesunięta została
+  tylko jej granica. Odpowiedź zwraca `queryCategories`.
+- **Rubryka ocen w promptcie sędziego:** 90–100 (ten sam produkt: kształt ORAZ kolor/wykończenie) / 70–89 (ten sam
+  kształt, inny kolor) / 50–69 / 30–49 / 0–29, z jawną regułą: różnica orientacji, formatu lub wykończenia sama
+  w sobie zdejmuje ocenę poniżej 90. Powód: 92% dla płytki różniącej się kolorem, orientacją i połyskiem (zweryfikowane wzrokowo).
+- **Kolor zależny od kategorii:** dla `plytki/podlogi/tapety/dywan` kolor i wzór są kryterium **głównym**
+  (inny odcień → maks. 60), bo tam kolor JEST produktem; dla mebli i lamp bez zmian (kolor = wariant).
+- **Orientacja i układ w opisie:** `wzor_faktura` wymaga osobno orientacji (pionowo/poziomo/ukośnie) i układu
+  (równe rzędy / przesunięty / jodełka / plaster miodu / losowy), z podpowiedzią „sprawdź, czy fugi biegną
+  nieprzerwaną linią". Powód: opis mówił „układ przesunięty" o kaflach ułożonych w równe pionowe kolumny.
+- Weryfikacja na zgłoszonych zapytaniach: szafka łazienkowa 3× szafka nocna 15/15/10% → **KOMODA NOTCH 6 szuflad 92%**;
+  płytki podłogowe 3× deska dębowa 0% → **wielkoformatowe płytki 85/82/78%**; płytki ścienne 92/88/85% → **72/70/65%**
+  z uzasadnieniem różnicy orientacji i koloru; ścieżka `weakMatch` potwierdzona (wymuszona kategoria → 0%, flaga `true`).
+
+**Krok 13.7 — Grupowanie wariantów kolorystycznych** — ⏸️ ODŁOŻONE (dane nie pozwalają)
+- Zamiar: `KINKIET FAYETTE ZŁOTY / CZARNY` → jedna karta z wariantami, żeby TOP3 nie było zajęte przez jeden model.
+- `scripts/regroup-variants.mjs` (dry-run domyślnie, **nie uruchamiany z APPLY na produkcji**) pokazał, dlaczego to nie działa:
+  bez zabezpieczeń scalał **35 różnych paneli 3D ORAC** (W108/W110…) w jedną kartę — ukryłby 34 produkty;
+  po warunku „identyczne parametry" dalej scalał 8 lamp MAXLIGHT o tej samej nazwie i różnych kodach, bo te produkty
+  **nie mają w bazie ani wymiarów, ani specyfikacji**; po warunku „musi istnieć realny dowód tożsamości (wymiar
+  lub specyfikacja)" zostają **4 produkty** do przegrupowania przy **886 zablokowanych**.
+- Wniosek: nazwa nie odróżnia „innego koloru" od „innego modelu" (SKU zmienia się w obu przypadkach). Dodatkowo
+  pierwotny przykład był chybiony — kinkiety FAYETTE W0366/67/68 różnią się **długością**, więc trzy pozycje są poprawne.
+- **Właściwe miejsce poprawki: import.** maxfliz to Shopify — `/products.json` zawiera `options`/`variants` z jawnym
+  kolorem; tożsamość wariantu należy wziąć ze źródła zamiast zgadywać z nazwy (`scrape-maxfliz.mjs`).
+
 ---
 
 ## H. Szacunek kosztów (rząd wielkości)

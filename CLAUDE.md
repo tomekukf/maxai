@@ -143,8 +143,15 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   z `recallK`), `MAX_RECALL_QUALITY=12` / `MAX_RECALL_FAST=60`, nierówny podział budżetu (czołówka +1 ujęcie) — sufit
   zapytania ~35 gr zamiast „nielimitowany". ✅ **13.5 kanon zdjęć** (`docs/product-images-spec.md`: 3 na produkt, maks. 4,
   `sortOrder:0` = packshot bo tylko on trafia do sędziego) + **deduplikacja ujęć** (`scripts/dedupe-images.mjs`, próg **0,95**
-  — przy 0,90 giną warianty kolorystyczne; usunięto 1904). Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 13.
-- ▶️ Następne (do rozważenia): **Faza 8.5 dla płytek** — bez opisów wizualnych kształt w tej kategorii nie istnieje jako sygnał
+  — przy 0,90 giną warianty kolorystyczne; usunięto 1904). ✅ **13.6 uczciwość wyniku:** stan **„brak odpowiednika"**
+  (`weakMatch` gdy najlepsza ocena < 30 → UI mówi wprost „to nie są substytuty"), **kategorie siostrzane w bramce**
+  (`plytki↔podlogi`, `szafka→komoda/mebel/lazienka`, `stol↔stolik`, `sofa↔naroznik`), **rubryka ocen** sędziego
+  (90+ tylko przy zgodnym kształcie ORAZ kolorze), **kolor zależny od kategorii** (dla powierzchni kryterium główne)
+  oraz **orientacja i układ** w opisie wzoru. ⏸️ **13.7 grupowanie wariantów kolorystycznych ODŁOŻONE** — dane nie
+  odróżniają wariantu koloru od innego modelu (dowód i narzędzie: `scripts/regroup-variants.mjs`); właściwe miejsce
+  to import z `options`/`variants` Shopify. Szczegóły: `PLAN_IMPLEMENTACJI.md` Faza 13.
+- ▶️ Następne (do rozważenia): **tożsamość wariantów przy imporcie** (Shopify `options`/`variants` w `scrape-maxfliz.mjs`
+  → odblokowuje Krok 13.7); **Faza 8.5 dla płytek** — bez opisów wizualnych kształt w tej kategorii nie istnieje jako sygnał
   (nazwy to kody, `subtype` to format); dogenerować `attributes` lokalnie, partia walidacyjna ~100–150 szt.
   Uzupełnienie zdjęć dla produktów z jednym ujęciem; dokończenie importu maxfliz; ew. dedykowany endpoint `/stats`
   (dziś statystyki liczone przez pełny skan `slim` z frontu); hosting frontu (Amplify — **nie istnieje**, front działa lokalnie).
@@ -163,8 +170,15 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
   - Embeddingi (1024): `amazon.titan-embed-image-v1` ✅
   - NIE używać Claude 3 Haiku (przestarzały).
 - **Embeddingi:** Amazon Titan Multimodal (1024 wym.).
-- **Kategoria = jedyny twardy filtr (od Fazy 5).** Substytut zawsze w tej samej kategorii; wszystko inne
-  (podtyp, kolor, materiał, wymiar) pozostaje miękkie — od Fazy 13.1 jako punktowane sygnały, nie `WHERE`.
+- **Kategoria = jedyny twardy filtr (od Fazy 5), ale z kategoriami siostrzanymi (od Fazy 13.6).** Bramka wpuszcza
+  kategorię zapytania + jej siostry (`_SIBLING_CATEGORIES` w `search/handler.py`: `plytki↔podlogi`,
+  `szafka→komoda/mebel/lazienka`, `stol↔stolik`, `sofa↔naroznik`) — bo granica taksonomii nie pokrywa się z intencją
+  („płytki podłogowe" ≠ nasze `podlogi`). Wszystko inne (podtyp, kolor, materiał, wymiar) pozostaje miękkie —
+  od Fazy 13.1 jako punktowane sygnały, nie `WHERE`.
+- **Kolor: drugorzędny dla mebli/lamp, GŁÓWNY dla powierzchni (od Fazy 13.6).** Dla `plytki/podlogi/tapety/dywan`
+  inny odcień = inny produkt (ocena maks. 60), bo tam kolor i wzór SĄ produktem; dla reszty kolor to wariant.
+- **Wynik ma być uczciwy (od Fazy 13.6).** Gdy najlepsza ocena < `WEAK_MATCH_BELOW` (30), zwracamy wyniki, ale
+  oznaczone jako „najbliższe wizualnie, nie substytuty". Zasada „nigdy brak wyniku" nie oznacza podawania 10% jako oferty.
 - **Zdjęcia produktu: 3, maksymalnie 4 (od Fazy 13.5).** `sortOrder: 0` = packshot, bo przy domyślnym `recallK`
   **tylko zdjęcie główne trafia do sędziego**; do reranku pobierane są maks. 4 (`LIMIT 4`). Kanon i czarna lista
   ujęć: `docs/product-images-spec.md` (obowiązuje każdy import i każdy model zasilający bazę).
