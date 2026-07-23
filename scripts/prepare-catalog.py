@@ -110,6 +110,11 @@ w panelu admina (Import kolekcji).
 - Warstwa tekstu: {probe['has_text_layer']} · prefiksy kodów: {probe['code_prefixes']}
 - Śr. obrazów/stronę: {probe['avg_images_per_page']} · próbki: `samples/` (strony {probe['sample_pdf_pages']})
 
+## ZANIM ZACZNIESZ
+Przeczytaj **`docs/catalog-import-spec.md`** — kanon importu (co które pole robi w rankingu, jak wybierać
+kategorię/subtype/nazwę, jakie dane zapisać „na zapas", jak skontrolować import). Ten plik to tylko
+uzupełnienie o fakty z tego konkretnego PDF-a.
+
 ## Kroki
 1. **Obejrzyj próbki** (`rawdata/{args.name}/samples/*.png`) i odczytaj tekst kilku stron
    (`fitz`), by rozpoznać układ: gdzie nazwa, kod(y), specyfikacja, które zdjęcie to cutout, a które render.

@@ -17,6 +17,15 @@ miękkie/opcjonalne (nie twarde `WHERE`), żeby nie wykluczać dobrych zamiennik
 - `PLAN_IMPLEMENTACJI.md` — pełny plan podzielony na kroki (główny dokument roboczy).
 - `max_ai_concept.txt.txt` — pierwotna koncepcja (wypracowana z Gemini), po review technicznym.
 
+### Kanony (obowiązkowe przed odpowiednią pracą)
+- **`docs/catalog-import-spec.md` — zasilanie bazy danymi. PRZECZYTAJ ZAWSZE, zanim zaczniesz import
+  (katalog PDF, scraping, plik od producenta) albo pisanie skryptu ekstrakcji.** Mówi, które pole
+  do czego służy w rankingu, jak wybierać kategorię/subtype/nazwę, co zapisać „na zapas" i jak
+  sprawdzić import. Gdy użytkownik mówi „przygotuj katalog X" / „zaimportuj dane" — start jest tutaj.
+- `docs/product-images-spec.md` — ile zdjęć i które (3, maks. 4; `sortOrder: 0` = packshot).
+- `docs/product-description-spec.md` — schemat i prompt opisu wizualnego (`attributes`).
+- `docs/admin-runbook.md` — procedury operacyjne (widoczne też w GUI, zakładka Dokumentacja).
+
 ## Status
 🎉 **Faza 0 (fundament) ukończona.** Repo: `github.com/tomekukf/maxai` (branch `main`).
 - ✅ Krok 0.1 — repozytorium i struktura (commit `0b98d26`).

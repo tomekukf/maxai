@@ -61,6 +61,10 @@ Zmienne: `DB_SECRET` = nazwa sekretu z Secrets Manager (output stacku `DbSecretN
 
 ## Onboarding nowego katalogu (od PDF do bazy)
 
+> **Kanon importu: `docs/catalog-import-spec.md`** — przeczytaj przed każdym zasilaniem bazy.
+> Opisuje, co które pole robi w wyszukiwaniu, jak wybierać kategorię i subtype, jak nazywać produkty,
+> co zapisywać „na zapas" pod przyszłe zmiany oraz listę kontroli jakości po imporcie.
+
 Pełny przepływ (0 wywołań Bedrock vision):
 
 1. **Bootstrap:** `python scripts/prepare-catalog.py <pdf> <nazwa> [--manufacturer X] [--category Y]`
