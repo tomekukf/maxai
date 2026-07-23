@@ -249,7 +249,10 @@ def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
         content = [
             {"text": "ZAPYTANIE — mebel do dopasowania (wycinek z wizualizacji wnętrza):"},
             {"image": {"format": _img_format(query_bytes), "source": {"bytes": query_bytes}}},
-            {"text": f"Atrybuty ZAPYTANIA (opis wizualny): {q_attrs}"},
+            {"text": (
+                "Atrybuty ZAPYTANIA (opis wizualny) — UWAGA: to HIPOTEZA innego modelu z TEGO SAMEGO zdjęcia, "
+                f"bywa błędna: {q_attrs}"
+            )},
         ]
         if isinstance(query_context, dict):
             ctx_bits = {k: query_context.get(k) for k in ("typ", "ksztalt", "material", "cechy", "wymiary_cm")
@@ -293,6 +296,11 @@ def _rerank(query_bytes, cands, query_attrs=None, query_context=None):
                     "Kandydaci mogą mieć PARAMETRY/specyfikację (moc W, barwa K, IP, kąt °, źródło światła, wymiary) — "
                     "użyj ich pomocniczo do potwierdzenia/rozróżnienia. Nie przeceniaj samej wielkości ani tła renderu. "
                     "POMIŃ tylko kandydatów o wyraźnie innej bryle/kształcie lub innym typie (nie umieszczaj ich w wynikach). "
+                    "ANTY-ZAKOTWICZENIE (ważne): opis zapytania i etykieta użytkownika to HIPOTEZY, nie fakty — "
+                    "kształt, wzór i układ oceniaj WYŁĄCZNIE z obrazu ZAPYTANIA powyżej. Jeśli obraz przeczy opisowi "
+                    "(np. opis mówi 'heksagon', a na zdjęciu są łuski/pióra/prostokąty), zignoruj opis i kieruj się obrazem. "
+                    "Nigdy nie przypisuj kandydatowi cechy, której nie widać na jego zdjęciu; w 'powod' opisuj tylko to, "
+                    "co faktycznie widzisz na obu obrazach. "
                     "Dla każdego kandydata podaj też 'powod' — krótkie (do ~14 słów) uzasadnienie oceny "
                     "(przede wszystkim: kształt/bryła/typ; kolor/materiał tylko wtórnie). "
                     'Zwróć WYŁĄCZNIE JSON posortowany od najlepszego: '
@@ -479,7 +487,8 @@ def lambda_handler(event, _ctx):
         return _resp(400, {"error": "Nieprawidłowy base64"})
 
     top_k = max(1, min(int(body.get("topK", 3)), 20))
-    recall_k = max(top_k, int(body.get("recallK", 8)))  # kandydaci do rerankingu (budżet obrazów dzielony na nich)
+    # Kandydaci do rerankingu (budżet obrazów dzielony na nich). Górny limit = ochrona kosztu Sonnet.
+    recall_k = max(top_k, min(int(body.get("recallK", 8)), 40))
     fast = bool(body.get("fast"))  # tryb „szybki": sam cosinus (bez wizyjnego reranku Sonnet) — ~darmowy, do porównań/oszczędności
     emb = _embed_image(image_bytes)
     vec = "[" + ",".join(str(x) for x in emb) + "]"
@@ -515,7 +524,7 @@ def lambda_handler(event, _ctx):
 
     # Pula kandydatów szersza niż recall_k: miękkie sygnały mogą wyciągnąć w górę produkt,
     # który po samym cosinusie byłby poza zestawem dla sędziego (lepszy recall, koszt = tylko DB).
-    pool_k = min(60, max(recall_k * 3, 24))
+    pool_k = min(200, max(int(body.get("poolK") or 0), recall_k * 5, 40))
 
     def query():
         # Retrieve: TOP pool_k produktów (najlepsze ujęcie per produkt), z atrybutami i źródłem.

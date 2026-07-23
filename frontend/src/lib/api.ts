@@ -197,12 +197,13 @@ export async function searchByImage(
   hint?: string,
   contextImageBase64?: string, // opcjonalny rysunek techniczny/spec (F2a)
   fast?: boolean, // tryb „szybki": sam cosinus, bez rerank Sonnet (~darmowy)
+  recallK?: number, // ilu kandydatów trafia do oceny sędziego (debug; więcej = drożej)
 ): Promise<SearchResponse> {
   const r = await fetch(`${API_URL}/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // hint = etykieta z detekcji (np. „stolik kawowy") — naprowadza opis zapytania na właściwy obiekt.
-    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}), ...(contextImageBase64 ? { contextImageBase64 } : {}), ...(fast ? { fast: true } : {}) }),
+    body: JSON.stringify({ imageBase64, topK, ...(hint ? { hint } : {}), ...(contextImageBase64 ? { contextImageBase64 } : {}), ...(fast ? { fast: true } : {}), ...(recallK ? { recallK } : {}) }),
   });
   if (!r.ok) throw new Error(`search: ${r.status}`);
   const data = await r.json();

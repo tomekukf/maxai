@@ -157,6 +157,7 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
   const [contextB64, setContextB64] = useState<string | null>(null); // rysunek techniczny/spec (F2a)
   const [contextName, setContextName] = useState<string | null>(null);
   const [fastMode, setFastMode] = useState(false); // tryb „szybki" (sam cosinus, bez Sonnet) — admin/testy
+  const [recallK, setRecallK] = useState(8); // ilu kandydatów widzi sędzia (debug „czemu nie ma produktu X")
   // Narzędzia admina (tryb szybki, diagnostyka) — rola z propa z App, fallback na sesję z localStorage.
   const [adminFromSession] = useState(() => isAdmin(loadSession()));
   const admin = adminProp ?? adminFromSession;
@@ -384,7 +385,7 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
   async function runGroupSearch(gi: number, b64: string, k: number, hint?: string) {
     setGroups((gs) => gs.map((g, i) => (i === gi ? { ...g, busy: true, error: null } : g)));
     try {
-      const res = await searchByImage(b64, k, hint, contextB64 ?? undefined, fastMode);
+      const res = await searchByImage(b64, k, hint, contextB64 ?? undefined, fastMode, recallK);
       setGroups((gs) => gs.map((g, i) => (i === gi
         ? { ...g, results: res.results, queryAttrs: res.queryAttributes ?? null, queryCategory: res.queryCategory ?? null, queryContext: res.queryContext ?? null, mode: res.mode, busy: false, error: res.results.length ? null : 'Brak dobrego dopasowania w bazie.' }
         : g)));
@@ -398,7 +399,7 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
     if (!g || !g.b64) return;
     setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: true } : x)));
     try {
-      const res = await searchByImage(g.b64, g.results.length + 3, g.hint, contextB64 ?? undefined, fastMode);
+      const res = await searchByImage(g.b64, g.results.length + 3, g.hint, contextB64 ?? undefined, fastMode, recallK);
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, results: res.results, loadingMore: false } : x)));
     } catch (e) {
       setGroups((gs) => gs.map((x, i) => (i === gi ? { ...x, loadingMore: false, error: (e as Error).message } : x)));
@@ -433,6 +434,21 @@ export default function SearchPage({ admin: adminProp }: { admin?: boolean } = {
             <span className="text-slate-400">
               {fastMode ? 'ranking = kosinus Titana, 0 kosztu Bedrock (poza embeddingiem)' : 'ranking = pełny rerank Sonnet (domyślny, płatny)'}
             </span>
+            <label
+              className="flex items-center gap-1 text-slate-700"
+              title="Ilu kandydatów z retrieve trafia do oceny sędziego. Więcej = większa szansa, że produkt spoza ścisłej czołówki kosinusa w ogóle zostanie oceniony, ale i wyższy koszt Sonnet."
+            >
+              kandydatów do oceny
+              <input
+                type="number"
+                min={3}
+                max={40}
+                value={recallK}
+                onChange={(e) => setRecallK(Math.max(3, Math.min(40, Number(e.target.value) || 8)))}
+                className="w-14 rounded border border-slate-300 px-1 py-0.5"
+              />
+              {recallK > 12 && !fastMode && <span className="text-amber-700">(drożej)</span>}
+            </label>
           </div>
         )}
 
