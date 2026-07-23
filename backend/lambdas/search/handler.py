@@ -369,6 +369,98 @@ def _salvage_rerank_items(raw):
     return items
 
 
+# ---------------------------------------------------------------------------
+# Miękkie sygnały nie-wizualne (podtyp / nazwa / wymiary). Zero kosztu modeli.
+# Powód: embedding Titana nie zna skali ani funkcji — katalogowe zdjęcie wanny
+# wolnostojącej (biała owalna misa na białym tle) leży blisko okrągłej umywalki.
+# Kategoria zostaje JEDYNYM twardym filtrem; to tylko przesuwa kolejność.
+# ---------------------------------------------------------------------------
+_PL_MAP = str.maketrans("ąćęłńóśźż", "acelnoszz")
+W_SUBTYPE_OK = 0.05      # kandydat ma ten sam podtyp co zapytanie
+W_SUBTYPE_BAD = -0.08    # kandydat ma inny podtyp (np. wanna przy zapytaniu o umywalkę)
+W_NAME_OK = 0.05         # nazwa produktu zawiera słowo-klucz zapytania
+W_NAME_RIVAL = -0.08     # nazwa wskazuje inny typ z tej samej kategorii
+W_DIMS_BAD = -0.05       # wymiary rozjeżdżone o rząd wielkości (gdy znane po obu stronach)
+
+
+def _norm_txt(s):
+    return re.sub(r"[^a-z0-9]+", " ", str(s or "").lower().translate(_PL_MAP)).strip()
+
+
+def _head(s):
+    """Słowo-klucz: pierwszy człon podtypu/etykiety ('wanna_wolnostojaca' → 'wanna')."""
+    t = _norm_txt(s).split()
+    return t[0] if t else None
+
+
+def _max_dim(d):
+    if not isinstance(d, dict):
+        return None
+    vals = [v for v in d.values() if isinstance(v, (int, float)) and v > 0]
+    return max(vals) if vals else None
+
+
+def _soft_rescore(cands, query_attrs, hint_raw, query_context):
+    """Dolicza miękkie sygnały do cosinusa i zwraca listę posortowaną malejąco.
+
+    Słowa-klucze zapytania biorą się z opisu (subtype/typ) ORAZ z etykiety zaznaczenia
+    (hint) — świadomy wybór użytkownika ma wpływ na wynik. „Rywale" (inne typy w tej
+    samej kategorii) wyliczamy z danych: z podtypów kandydatów w tym zestawie, bez
+    żadnego zaszytego słownika.
+    """
+    q_heads = set()
+    if isinstance(query_attrs, dict):
+        for k in ("subtype", "typ"):
+            h = _head(query_attrs.get(k))
+            if h:
+                q_heads.add(h)
+    h = _head(hint_raw)
+    if h:
+        q_heads.add(h)
+    q_heads = {x for x in q_heads if len(x) >= 4 and not x.isdigit()}
+
+    cand_heads = {_head(c.get("subtype")) for c in cands}
+    rivals = {x for x in cand_heads if x and len(x) >= 4 and x.isalpha() and x not in q_heads}
+
+    q_dim = None
+    if isinstance(query_context, dict):
+        q_dim = _max_dim(query_context.get("wymiary_cm"))
+    if q_dim is None and isinstance(query_attrs, dict):
+        q_dim = _max_dim(query_attrs.get("wymiary_cm"))
+
+    for c in cands:
+        detail = {}
+        adj = 0.0
+        c_head = _head(c.get("subtype"))
+        c_name = _norm_txt(c.get("name"))
+        if q_heads and c_head:
+            if c_head in q_heads:
+                adj += W_SUBTYPE_OK
+                detail["podtyp"] = W_SUBTYPE_OK
+            elif len(c_head) >= 4 and c_head.isalpha():
+                adj += W_SUBTYPE_BAD
+                detail["podtyp"] = W_SUBTYPE_BAD
+        if q_heads and c_name:
+            if any(qh in c_name for qh in q_heads):
+                adj += W_NAME_OK
+                detail["nazwa"] = W_NAME_OK
+            elif any(rv in c_name for rv in rivals):
+                adj += W_NAME_RIVAL
+                detail["nazwa"] = W_NAME_RIVAL
+        if q_dim:
+            c_dim = _max_dim((c.get("params") or {}).get("wymiary_cm"))
+            if c_dim and (max(q_dim, c_dim) / min(q_dim, c_dim)) > 2.5:
+                adj += W_DIMS_BAD
+                detail["wymiary"] = W_DIMS_BAD
+        c["soft"] = detail or None
+        c["adj"] = round(min(1.0, max(0.0, c["sim"] + adj)), 4)
+
+    cands.sort(key=lambda c: c["adj"], reverse=True)
+    top = ", ".join(f"{c['name'][:24]}={c['adj']}({c['sim']})" for c in cands[:5])
+    print(f"[soft] slowa_klucze={sorted(q_heads)} rywale={sorted(rivals)} | {top}")
+    return cands
+
+
 def lambda_handler(event, _ctx):
     global _conn
     try:
@@ -404,7 +496,8 @@ def lambda_handler(event, _ctx):
             query_context = None
 
     # hint = etykieta z auto-detekcji (np. 'stolik kawowy') + doprecyzowanie z rysunku (typ/kształt).
-    hint = (body.get("hint") or "").strip()
+    hint_raw = (body.get("hint") or "").strip()  # sama etykieta zaznaczenia — sygnał miękki w rankingu
+    hint = hint_raw
     if isinstance(query_context, dict):
         parts = [f"{lab}={query_context[k]}" for k, lab in (("typ", "typ"), ("ksztalt", "kształt"))
                  if query_context.get(k)]
@@ -420,8 +513,12 @@ def lambda_handler(event, _ctx):
         cat = _norm_category(query_attrs.get("kategoria"))
     print(f"[gate] kategoria zapytania: {cat}")
 
+    # Pula kandydatów szersza niż recall_k: miękkie sygnały mogą wyciągnąć w górę produkt,
+    # który po samym cosinusie byłby poza zestawem dla sędziego (lepszy recall, koszt = tylko DB).
+    pool_k = min(60, max(recall_k * 3, 24))
+
     def query():
-        # Retrieve: TOP recall_k produktów (najlepsze ujęcie per produkt), z atrybutami i źródłem.
+        # Retrieve: TOP pool_k produktów (najlepsze ujęcie per produkt), z atrybutami i źródłem.
         # TWARDA bramka kategorii: substytut zawsze w tej samej kategorii (nie 'lampa zamiast sofy').
         where = "WHERE p.category = :cat " if cat else ""
         sql = (
@@ -440,7 +537,7 @@ def lambda_handler(event, _ctx):
             "  ORDER BY product_id, sim DESC"
             ") y "
             "ORDER BY sim DESC "
-            f"LIMIT {recall_k}"
+            f"LIMIT {pool_k}"
         )
         return _db().run(sql, q=vec, cat=cat) if cat else _db().run(sql, q=vec)
 
@@ -462,6 +559,9 @@ def lambda_handler(event, _ctx):
              manufacturer, catalog_page, catalog_name, catalog_pdf, sim) in rows
     ]
 
+    # Miękkie sygnały (podtyp/nazwa/wymiary) → przesortowanie puli i przycięcie do recall_k.
+    cands = _soft_rescore(cands, query_attrs, hint_raw, query_context)[:recall_k]
+
     # Wszystkie zdjęcia kandydata (do rerankingu wielozdjęciowego); w wyniku pokazujemy jedno.
     for c in cands:
         try:
@@ -474,9 +574,9 @@ def lambda_handler(event, _ctx):
         except Exception:  # noqa: BLE001
             c["image_urls"] = [c["image_s3_url"]]
 
-    # Tryb „szybki": kolejność wprost z cosinusa (retrieve już posortowany), BEZ wizyjnego reranku Sonnet.
+    # Tryb „szybki": kolejność z cosinusa + miękkich sygnałów (lista już posortowana), BEZ reranku Sonnet.
     if fast:
-        print("[mode] fast — ranking po cosinusie (bez rerank Sonnet)")
+        print("[mode] fast — ranking po cosinusie + sygnalach miekkich (bez rerank Sonnet)")
         order, scores, reasons = list(range(len(cands))), {}, {}
     else:
         # Rerank Sonnet 4.5 na zdjęciach + atrybutach + specyfikacji (kandydaci w tej samej kategorii).
@@ -486,8 +586,8 @@ def lambda_handler(event, _ctx):
     for idx in order[:top_k]:
         c = cands[idx]
         score = scores.get(idx)  # ocena dopasowania 0-100 z rerankingu (gdy dostępna)
-        # Wyświetlany wynik = ocena rerankingu (spójna z kolejnością); fallback: cosinus Titana.
-        match = round(score / 100, 4) if score is not None else c["sim"]
+        # Wyświetlany wynik = ocena rerankingu (spójna z kolejnością); fallback: cosinus + sygnały miękkie.
+        match = round(score / 100, 4) if score is not None else c.get("adj", c["sim"])
         item = {
             "id": c["product_id"],
             "optimaId": c["optimaId"],
@@ -498,6 +598,8 @@ def lambda_handler(event, _ctx):
             "imageUrl": _presign_get(c["image_s3_url"]),
             "similarity": match,
             "visualSimilarity": c["sim"],  # surowy cosinus Titana (pomocniczo)
+            "adjustedSimilarity": c.get("adj"),  # cosinus + sygnały miękkie (kolejność retrieve)
+            "softSignals": c.get("soft"),        # co dołożyło/odjęło (podtyp/nazwa/wymiary)
             "reranked": score is not None,
             "source": c["source"],
             "category": c["category"],

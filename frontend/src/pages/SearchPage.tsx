@@ -874,6 +874,7 @@ function DiagPanel({
                 <th className="text-left font-normal">produkt</th>
                 <th className="text-left font-normal">rerank</th>
                 <th className="text-left font-normal">kosinus (Titan)</th>
+                <th className="text-left font-normal">sygnały miękkie</th>
                 <th className="text-left font-normal">powód (sędzia)</th>
               </tr>
             </thead>
@@ -884,6 +885,22 @@ function DiagPanel({
                   <td className="pr-2">{r.name} <span className="text-slate-400">{(r.params?.codes as string[] | undefined)?.[0] ?? ''}</span></td>
                   <td className="pr-2 font-medium">{r.rerankScore != null ? `${r.rerankScore}%` : '—'}</td>
                   <td className="pr-2">{r.visualSimilarity != null ? `${(r.visualSimilarity * 100).toFixed(0)}%` : '—'}</td>
+                  <td className="pr-2 whitespace-nowrap">
+                    {r.softSignals && Object.keys(r.softSignals).length ? (
+                      <>
+                        {Object.entries(r.softSignals).map(([k, v]) => (
+                          <span key={k} className={v >= 0 ? 'mr-1 text-emerald-700' : 'mr-1 text-red-700'}>
+                            {k} {v > 0 ? '+' : ''}{(v * 100).toFixed(0)}
+                          </span>
+                        ))}
+                        {r.adjustedSimilarity != null && (
+                          <span className="text-slate-500">= {(r.adjustedSimilarity * 100).toFixed(0)}%</span>
+                        )}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="text-slate-600">{r.reason ?? '—'}</td>
                 </tr>
               ))}

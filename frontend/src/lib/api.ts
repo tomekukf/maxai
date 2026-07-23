@@ -170,6 +170,8 @@ export type SearchResult = {
   source?: string; // 'optima' | 'catalog'
   category?: string;
   // Wyjaśnialność (analityka):
+  adjustedSimilarity?: number; // cosinus + miękkie sygnały (kolejność retrieve / tryb szybki)
+  softSignals?: Record<string, number> | null; // co dołożyło/odjęło: podtyp / nazwa / wymiary
   rerankScore?: number | null; // ocena rerankingu 0-100 (null = fallback wizualny)
   reason?: string | null; // krótkie uzasadnienie modelu
   attributes?: Record<string, unknown> | null; // opis wizualny produktu (jeśli jest)
