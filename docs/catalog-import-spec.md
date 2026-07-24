@@ -31,6 +31,21 @@ jest gorsze niż puste, bo puste system pomija, a błędne aktywnie psuje wynik.
 
 ---
 
+## 0.5. Triage wielu katalogów naraz
+
+Gdy dostajesz **pulę wymieszanych** dostawców (cenniki + katalogi + zdjęcia + modele 3D), najpierw przegląd całości:
+
+```bash
+python scripts/analyze-catalogs.py       # → rawdata/catalogs/_index.json + _status.html (dashboard)
+```
+
+Analizator nadaje każdemu dostawcy status importowalności (GOTOWY / EKSTRAKCJA_PDF / BRAK_ZDJEC / BRAK_NAZW /
+PUSTY / NIEPRZYDATNE), ocenę jakości i flagę „już w bazie". `_status.html` to podgląd dla człowieka (filtry,
+sortowanie). Skrypt jest **re-używalny** — uruchom ponownie po dodaniu danych. Logika klasyfikacji (progi,
+kubełki plików, statusy) jest wydzielona na górze skryptu i **przeznaczona do strojenia**, gdy dojdą nowe typy danych.
+
+Dopiero po triażu bierzesz pojedynczego dostawcę (najlepiej GOTOWY o wysokiej jakości) i przechodzisz przez resztę tego kanonu.
+
 ## 1. Zanim zaczniesz: trzy pytania do źródła
 
 1. **Co to za dane?** Katalog PDF producenta (`source: "catalog"`, jest `catalogPage` i link do strony),

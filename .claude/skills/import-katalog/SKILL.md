@@ -20,6 +20,25 @@ Przeczytaj w tej kolejności:
 Jeśli któregoś nie ma lub jest sprzeczny z tym, co widzisz w kodzie — powiedz to użytkownikowi,
 zamiast działać na domysłach.
 
+## Krok 0.5 — triage całej puli (gdy dostajesz wiele katalogów naraz)
+
+Gdy użytkownik wrzuca folder z **wieloma** dostawcami (np. `rawdata/catalogs/**`, cenniki wymieszane
+z katalogami, zdjęciami, modelami 3D), najpierw zrób przegląd całości, zanim zabierzesz się za pojedynczy:
+
+```bash
+python scripts/analyze-catalogs.py            # → rawdata/catalogs/_index.json + _status.html
+```
+
+Analizator klasyfikuje każdego dostawcę i nadaje status: **GOTOWY** (luźne zdjęcia + nazwy → można przygotować),
+**EKSTRAKCJA_PDF** (katalog PDF ze zdjęciami do wyciągnięcia), **BRAK_ZDJEC** (sam cennik — maxai wymaga zdjęć,
+nieimportowalne wprost), **BRAK_NAZW**, **PUSTY**, **NIEPRZYDATNE** (3D/wideo). Flaguje też, co już jest w bazie
+(`_imported.txt`). `_status.html` to dashboard do podglądu dla użytkownika (filtry, sortowanie, jakość).
+Skrypt jest **re-używalny** — uruchamiaj ponownie, gdy dojdą nowe dane.
+
+Na tej podstawie ustal z użytkownikiem **kolejność prac** (najpierw GOTOWY o najwyższej jakości), a potem dla
+wybranego dostawcy przejdź do kroków 1–7 poniżej. Producentów już w bazie odśwież przez:
+`node` jednolinijkowiec zapisujący `SELECT DISTINCT manufacturer` do `rawdata/catalogs/_imported.txt`.
+
 ## Krok 1 — ustal źródło i zakres (zapytaj, jeśli nie wiadomo)
 
 - **Typ źródła:** katalog PDF (`source: "catalog"`, jest `catalogPage`), sklep/web (`source: "web"`,
