@@ -267,7 +267,18 @@ STATUS_META = {
 STATUS_ORDER = ["GOTOWY", "GOTOWY_MALO", "EKSTRAKCJA_PDF", "BRAK_ZDJEC", "BRAK_NAZW", "DO_WERYFIKACJI", "PUSTY", "NIEPRZYDATNE"]
 
 
-def render_html(vendors: list[dict], generated: str) -> str:
+# Stany PRACY (postęp — edytowalne przez użytkownika, trwałe między odświeżeniami):
+WORK_STATES = [
+    ("todo",       "Do zrobienia",   "#6b7280"),
+    ("progress",   "W toku",         "#2563eb"),
+    ("prepared",   "Przygotowane",   "#7c3aed"),
+    ("imported",   "Zaimportowane",  "#108474"),
+    ("rejected",   "Odrzucone",      "#b91c1c"),
+    ("hold",       "Wstrzymane",     "#d97706"),
+]
+
+
+def render_html(vendors: list[dict], generated: str, progress: dict) -> str:
     esc = lambda s: (str(s) if s is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     counts = {s: 0 for s in STATUS_ORDER}
     for v in vendors:
@@ -279,12 +290,19 @@ def render_html(vendors: list[dict], generated: str) -> str:
         f'<span class="n">{counts.get(s,0)}</span><span class="l">{esc(STATUS_META[s][1])}</span></button>'
         for s in STATUS_ORDER
     )
+    # karty postępu (liczniki wypełnia JS z localStorage)
+    prog_cards = "".join(
+        f'<button class="pcard" data-pfilter="{k}" style="--c:{c}">'
+        f'<span class="n" data-pcount="{k}">0</span><span class="l">{esc(lbl)}</span></button>'
+        for k, lbl, c in WORK_STATES
+    )
 
     rows = []
     for v in sorted(vendors, key=lambda x: (STATUS_ORDER.index(x["status"]) if x["status"] in STATUS_ORDER else 9, -x["quality"])):
         sg = v["signals"]
         color = STATUS_META.get(v["status"], ("#6b7280", v["status"]))[0]
         badge = STATUS_META.get(v["status"], ("#6b7280", v["status"]))[1]
+        vid = f'{v["group"]}/{v["folder"]}'  # stabilny klucz postępu (przetrwa re-analizę)
         chips = []
         if sg["product_images"]:      chips.append(f'📷 {sg["product_images"]}')
         if sg["price_lists"]:         chips.append(f'📊 {sg["price_lists"]} cennik')
@@ -298,99 +316,172 @@ def render_html(vendors: list[dict], generated: str) -> str:
         if v["discount_pct"] is not None: meta.append(f'rabat {v["discount_pct"]}%')
         if v["lead_time"]: meta.append(esc(v["lead_time"]))
         imp = '<span class="imp">✓ w bazie</span>' if v["imported"] else ""
+        opts = "".join(f'<option value="{k}">{esc(lbl)}</option>' for k, lbl, _ in WORK_STATES)
         rows.append(
             f'<tr data-status="{v["status"]}" data-group="{esc(v["group"])}" data-imported="{1 if v["imported"] else 0}" '
-            f'data-q="{v["quality"]}" data-name="{esc(v["brand"].lower())}">'
+            f'data-q="{v["quality"]}" data-name="{esc(v["brand"].lower())}" data-id="{esc(vid)}">'
             f'<td><span class="dot" style="background:{color}"></span></td>'
             f'<td class="brand"><b>{esc(v["brand"])}</b> {imp}<div class="sub">{esc(v["folder"])}</div>'
             f'<div class="metas">{esc(" · ".join(meta))}</div></td>'
             f'<td><span class="badge" style="background:{color}">{esc(badge)}</span>'
             f'<div class="reason">{esc(v["reason"])}</div></td>'
             f'<td class="chips">{chips_html}</td>'
-            f'<td class="grp">{esc(v["group"])}</td>'
+            f'<td class="prog">'
+            f'<select class="wsel">{opts}</select>'
+            f'<input class="wnote" placeholder="notatka…">'
+            f'<div class="wupd"></div></td>'
             f'<td class="q"><span class="qbar"><i style="width:{v["quality"]}%;background:{color}"></i></span>{v["quality"]}</td>'
             f'<td class="sz">{sg["total_mb"]} MB<div class="sub">{sg["total_files"]} plików</div></td>'
             f'</tr>'
         )
     rows_html = "\n".join(rows)
+    seed = json.dumps(progress, ensure_ascii=False)
+    states = json.dumps([[k, lbl, c] for k, lbl, c in WORK_STATES], ensure_ascii=False)
 
     return f"""<!doctype html><html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>maxai — status katalogów do importu</title>
+<title>maxai — tracker importu katalogów</title>
 <style>
 :root{{color-scheme:light dark;--bg:#f7f7f5;--fg:#1a1a1a;--mut:#6b7280;--line:#e5e5e2;--card:#fff;--acc:#760039}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#15161a;--fg:#e8e8e6;--mut:#9aa0a6;--line:#2a2c31;--card:#1d1f24}}}}
 *{{box-sizing:border-box}}body{{font:15px/1.5 'Jost',system-ui,sans-serif;margin:0;background:var(--bg);color:var(--fg)}}
 header{{padding:22px 26px 8px}}h1{{margin:0;font-size:20px}}.sub{{color:var(--mut);font-size:12px}}
 .wrap{{padding:0 26px 40px}}
-.cards{{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}}
-.card{{flex:1 1 130px;min-width:130px;border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;
-  background:var(--card);padding:10px 12px;cursor:pointer;text-align:left;font:inherit;color:inherit}}
-.card:hover{{border-color:var(--c)}}.card.active{{outline:2px solid var(--c)}}
-.card .n{{display:block;font-size:24px;font-weight:600}}.card .l{{font-size:12px;color:var(--mut)}}
-.bar{{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 14px}}
+.sec{{font-size:12px;color:var(--mut);margin:16px 0 6px;text-transform:uppercase;letter-spacing:.04em}}
+.cards{{display:flex;flex-wrap:wrap;gap:10px}}
+.card,.pcard{{flex:1 1 120px;min-width:120px;border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;
+  background:var(--card);padding:9px 12px;cursor:pointer;text-align:left;font:inherit;color:inherit}}
+.card:hover,.pcard:hover{{border-color:var(--c)}}.card.active,.pcard.active{{outline:2px solid var(--c)}}
+.card .n,.pcard .n{{display:block;font-size:23px;font-weight:600}}.card .l,.pcard .l{{font-size:12px;color:var(--mut)}}
+.bar{{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:14px 0}}
 input[type=search]{{flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:inherit}}
 label.f{{font-size:13px;color:var(--mut);display:flex;gap:5px;align-items:center;cursor:pointer}}
+button.act{{font:inherit;font-size:13px;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:inherit;cursor:pointer}}
+button.act:hover{{border-color:var(--acc)}}
 table{{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}}
 th,td{{padding:9px 12px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}}
 th{{position:sticky;top:0;background:var(--card);font-size:12px;color:var(--mut);cursor:pointer;user-select:none;z-index:1}}
 tr:hover td{{background:color-mix(in srgb,var(--acc) 5%,transparent)}}
+tr.done td{{opacity:.62}}
 .dot{{display:inline-block;width:10px;height:10px;border-radius:50%}}
 .brand b{{font-size:15px}}.brand .sub{{font-size:11px}}.metas{{font-size:11px;color:var(--mut);margin-top:2px}}
 .badge{{display:inline-block;color:#fff;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}}
-.reason{{font-size:11px;color:var(--mut);margin-top:4px;max-width:260px}}
+.reason{{font-size:11px;color:var(--mut);margin-top:4px;max-width:240px}}
 .chip{{display:inline-block;background:color-mix(in srgb,var(--fg) 8%,transparent);border-radius:6px;padding:1px 7px;font-size:11px;margin:2px 2px 0 0;white-space:nowrap}}
-.imp{{color:#108474;font-size:11px;font-weight:600}}.grp{{font-size:12px;color:var(--mut)}}
-.q{{white-space:nowrap;font-size:12px}}.qbar{{display:inline-block;width:54px;height:6px;border-radius:4px;background:var(--line);margin-right:6px;vertical-align:middle;overflow:hidden}}
+.imp{{color:#108474;font-size:11px;font-weight:600}}
+.prog{{min-width:170px}}.wsel{{width:100%;padding:4px 6px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:inherit;font:inherit;font-size:12px;border-left:4px solid var(--wc,var(--line))}}
+.wnote{{width:100%;margin-top:5px;padding:4px 6px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:inherit;font:inherit;font-size:12px}}
+.wupd{{font-size:10px;color:var(--mut);margin-top:3px}}
+.q{{white-space:nowrap;font-size:12px}}.qbar{{display:inline-block;width:50px;height:6px;border-radius:4px;background:var(--line);margin-right:6px;vertical-align:middle;overflow:hidden}}
 .qbar i{{display:block;height:100%}}.sz{{font-size:12px;white-space:nowrap}}.sz .sub{{font-size:10px}}
 .hidden{{display:none}}
 footer{{color:var(--mut);font-size:12px;padding:8px 26px 30px}}
 </style></head><body>
-<header><h1>maxai — status katalogów do importu</h1>
-<div class="sub">Wygenerowano {esc(generated)} · {len(vendors)} dostawców · {imported_n} już w bazie ·
-kliknij kartę statusu lub nagłówek kolumny, by filtrować/sortować</div></header>
+<header><h1>maxai — tracker importu katalogów</h1>
+<div class="sub">Analiza z {esc(generated)} · {len(vendors)} dostawców · {imported_n} rozpoznanych w bazie ·
+zmiany postępu <b>zapisują się automatycznie</b> w tej przeglądarce. Aby utrwalić/przenieść — „Zapisz postęp".</div></header>
 <div class="wrap">
+<div class="sec">Postęp pracy (klikalny — Twój)</div>
+<div class="cards">{prog_cards}</div>
+<div class="sec">Ocena importowalności (automatyczna — z analizy plików)</div>
 <div class="cards">{cards}</div>
 <div class="bar">
   <input type="search" id="q" placeholder="szukaj marki lub folderu…">
-  <label class="f"><input type="checkbox" id="hideImp"> ukryj już zaimportowane</label>
+  <label class="f"><input type="checkbox" id="hideDone"> ukryj zaimportowane/odrzucone</label>
   <label class="f"><input type="checkbox" id="onlyReady"> tylko nadające się (Gotowy / Ekstrakcja PDF)</label>
+  <span style="flex:1"></span>
+  <button class="act" id="save">💾 Zapisz postęp (_progress.json)</button>
+  <button class="act" id="load">📂 Wczytaj postęp</button>
+  <input type="file" id="file" accept="application/json" hidden>
 </div>
 <table id="t"><thead><tr>
-<th data-k="status"></th><th data-k="name">Dostawca</th><th data-k="status">Status / decyzja</th>
-<th>Sygnały (co jest w folderze)</th><th data-k="group">Grupa</th><th data-k="q">Jakość</th><th data-k="sz">Rozmiar</th>
+<th data-k="status"></th><th data-k="name">Dostawca</th><th data-k="status">Ocena (auto)</th>
+<th>Sygnały (co jest w folderze)</th><th data-k="work">Postęp (Ty)</th><th data-k="q">Jakość</th><th data-k="sz">Rozmiar</th>
 </tr></thead><tbody>
 {rows_html}
 </tbody></table>
 </div>
-<footer>Legenda statusów: <b>Gotowy</b> — luźne zdjęcia + nazwy/kody, można przygotować od razu ·
-<b>Ekstrakcja PDF</b> — katalog ze zdjęciami do wyciągnięcia · <b>Brak zdjęć</b> — sam cennik, maxai wymaga zdjęć ·
-<b>Brak nazw/kodów</b> — zdjęcia bez cennika · <b>Nieprzydatne</b> — 3D/wideo/materiały pomocnicze.
-Ceny nie są importowane. Uruchom ponownie <code>python scripts/analyze-catalogs.py</code> po dodaniu danych.</footer>
+<footer>Ocena (auto): <b>Gotowy</b> — luźne zdjęcia + nazwy/kody · <b>Ekstrakcja PDF</b> — katalog ze zdjęciami do wyciągnięcia ·
+<b>Brak zdjęć</b> — sam cennik (maxai wymaga zdjęć) · <b>Nieprzydatne</b> — 3D/wideo. Ceny nie są importowane.
+Postęp trzymany jest w przeglądarce (localStorage) i przetrwa ponowną analizę (klucz = grupa/folder).
+Po dodaniu danych uruchom <code>python scripts/analyze-catalogs.py</code>; by postęp był widoczny też dla skryptu/na innym
+komputerze — „Zapisz postęp" i wrzuć <code>_progress.json</code> do <code>rawdata/catalogs/</code>.</footer>
 <script>
+const SEED={seed};                 // postęp z _progress.json (jeśli był) — używany, gdy localStorage puste
+const STATES={states};             // [[klucz,etykieta,kolor],…]
+const LS='maxai_catalog_progress';
+const COLOR=Object.fromEntries(STATES.map(s=>[s[0],s[2]]));
+const LABEL=Object.fromEntries(STATES.map(s=>[s[0],s[1]]));
+const DONE=['imported','rejected'];
+let store=JSON.parse(localStorage.getItem(LS)||'null')||JSON.parse(JSON.stringify(SEED||{{}}));
+function persist(){{localStorage.setItem(LS,JSON.stringify(store));}}
 const t=document.getElementById('t'),tb=t.tBodies[0],rows=[...tb.rows];
-let filter=null;
+let filter=null,pfilter=null,sortK=null,sortAsc=false;
+
+function paintRow(r){{
+  const id=r.dataset.id, e=store[id]||{{}};
+  const st=e.state||'todo';
+  const sel=r.querySelector('.wsel'); sel.value=st; sel.style.setProperty('--wc',COLOR[st]||'var(--line)');
+  r.querySelector('.wnote').value=e.note||'';
+  r.querySelector('.wupd').textContent=e.updated?('zmieniono '+e.updated):'';
+  r.dataset.work=st;
+  r.classList.toggle('done',DONE.includes(st));
+}}
+function counts(){{
+  const c=Object.fromEntries(STATES.map(s=>[s[0],0]));
+  for(const r of rows){{const st=(store[r.dataset.id]||{{}}).state||'todo';c[st]=(c[st]||0)+1;}}
+  document.querySelectorAll('[data-pcount]').forEach(el=>el.textContent=c[el.dataset.pcount]||0);
+}}
 function apply(){{
   const q=document.getElementById('q').value.toLowerCase().trim();
-  const hideImp=document.getElementById('hideImp').checked;
+  const hideDone=document.getElementById('hideDone').checked;
   const onlyReady=document.getElementById('onlyReady').checked;
   for(const r of rows){{
     let ok=true;
     if(filter&&r.dataset.status!==filter)ok=false;
+    if(pfilter&&r.dataset.work!==pfilter)ok=false;
     if(q&&!(r.dataset.name.includes(q)||r.textContent.toLowerCase().includes(q)))ok=false;
-    if(hideImp&&r.dataset.imported==='1')ok=false;
+    if(hideDone&&DONE.includes(r.dataset.work))ok=false;
     if(onlyReady&&!['GOTOWY','GOTOWY_MALO','EKSTRAKCJA_PDF'].includes(r.dataset.status))ok=false;
     r.classList.toggle('hidden',!ok);
   }}
 }}
+// init
+rows.forEach(paintRow); counts();
+rows.forEach(r=>{{
+  const id=r.dataset.id;
+  r.querySelector('.wsel').addEventListener('change',e=>{{
+    store[id]=Object.assign({{}},store[id],{{state:e.target.value,updated:new Date().toISOString().slice(0,16).replace('T',' ')}});
+    persist();paintRow(r);counts();apply();
+  }});
+  let tmr; r.querySelector('.wnote').addEventListener('input',e=>{{
+    clearTimeout(tmr);tmr=setTimeout(()=>{{
+      store[id]=Object.assign({{}},store[id],{{note:e.target.value,updated:new Date().toISOString().slice(0,16).replace('T',' ')}});
+      persist();r.querySelector('.wupd').textContent='zmieniono '+store[id].updated;
+    }},400);
+  }});
+}});
 document.querySelectorAll('.card').forEach(c=>c.onclick=()=>{{
   const s=c.dataset.filter;filter=filter===s?null:s;
   document.querySelectorAll('.card').forEach(x=>x.classList.toggle('active',x===c&&filter));apply();
 }});
+document.querySelectorAll('.pcard').forEach(c=>c.onclick=()=>{{
+  const s=c.dataset.pfilter;pfilter=pfilter===s?null:s;
+  document.querySelectorAll('.pcard').forEach(x=>x.classList.toggle('active',x===c&&pfilter));apply();
+}});
 document.getElementById('q').oninput=apply;
-document.getElementById('hideImp').onchange=apply;
+document.getElementById('hideDone').onchange=apply;
 document.getElementById('onlyReady').onchange=apply;
-let sortK=null,sortAsc=false;
+document.getElementById('save').onclick=()=>{{
+  const blob=new Blob([JSON.stringify(store,null,2)],{{type:'application/json'}});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='_progress.json';a.click();
+}};
+document.getElementById('load').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=e=>{{
+  const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+  rd.onload=()=>{{try{{store=JSON.parse(rd.result);persist();rows.forEach(paintRow);counts();apply();alert('Wczytano postęp.');}}catch{{alert('Zły plik JSON.');}}}};
+  rd.readAsText(f);
+}};
 t.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{{
   const k=th.dataset.k;sortAsc=sortK===k?!sortAsc:false;sortK=k;
   const val=r=>k==='q'?+r.dataset.q:k==='sz'?parseFloat(r.querySelector('.sz').textContent):(r.dataset[k]||r.dataset.name||'');
@@ -429,11 +520,22 @@ def main():
             print(f"  · {group_dir.name} / {vendor_dir.name}")
             vendors.append(analyze_vendor(vendor_dir, group_dir.name, not args.no_pdf_probe, imported))
 
+    # Postęp pracy (ustawiany ręcznie w dashboardzie) — seed dla świeżej przeglądarki / innego komputera.
+    # localStorage w HTML i tak ma priorytet; ten plik pozwala postępowi przetrwać reset przeglądarki
+    # i być widocznym dla skryptu. Klucz = "grupa/folder" (stabilny między re-analizami).
+    progress = {}
+    pp = root / "_progress.json"
+    if pp.exists():
+        try:
+            progress = json.loads(pp.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            print("  (uwaga: _progress.json nieczytelny — pomijam)")
+
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
     (root / "_index.json").write_text(
         json.dumps({"generated": generated, "root": str(root), "vendors": vendors}, ensure_ascii=False, indent=2),
         encoding="utf-8")
-    (root / "_status.html").write_text(render_html(vendors, generated), encoding="utf-8")
+    (root / "_status.html").write_text(render_html(vendors, generated, progress), encoding="utf-8")
 
     # podsumowanie do konsoli
     from collections import Counter
